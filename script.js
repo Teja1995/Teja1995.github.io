@@ -11,10 +11,15 @@ function generateQuestion() {
     }
 
     const question = `${num1} ${operator} ${num2}`;
-    const answer = calculateAnswer(num1, num2, operator);
 
     const questionContainer = document.getElementById('question-container');
-    questionContainer.innerHTML = `<p>${question} = ?</p><p>Answer: ${answer}</p>`;
+    questionContainer.innerHTML = `<p>${question} = ?</p><button onclick="revealAnswer(${num1}, ${num2}, '${operator}')">Reveal Answer</button>`;
+}
+
+function revealAnswer(num1, num2, operator) {
+    const answer = calculateAnswer(num1, num2, operator);
+    const questionContainer = document.getElementById('question-container');
+    questionContainer.innerHTML += `<p>Answer: ${answer}</p>`;
 }
 
 function getRandomNumber(max = 999) {
@@ -34,5 +39,4 @@ function calculateAnswer(num1, num2, operator) {
         default:
             return NaN; // Handle unsupported operators
     }
-}
-    
+                         }
