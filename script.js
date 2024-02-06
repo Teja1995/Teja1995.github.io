@@ -68,6 +68,19 @@ function endPractice() {
         <p>Incorrect Answers: ${totalQuestions - correctAnswers}</p>
         <p>Average Time Per Question: ${averageTimePerQuestion.toFixed(2)} seconds</p>
     `;
+
+    // Reset question container and provide option to restart
+    const questionContainer = document.getElementById('question-container');
+    questionContainer.innerHTML = `
+        <p>Practice session has ended.</p>
+        <p>Press the button below to start a new practice session.</p>
+        <button onclick="resetPractice()">Start New Practice</button>
+    `;
+}
+
+function resetPractice() {
+    document.getElementById('result-container').innerHTML = ''; // Clear previous results
+    startPractice(); // Start a new practice session
 }
 
 function countdown() {
@@ -103,4 +116,4 @@ function calculateAnswer(num1, num2, operator) {
             return NaN; // Handle unsupported operators
     }
         }
-                  
+        
