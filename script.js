@@ -75,4 +75,5 @@ function formatTime(seconds) {
     return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
 }
 
-startPractice(); // Test the startPractice function immediately on page load
+// Call the startPractice function immediately on page load
+startPractice();
