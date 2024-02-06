@@ -1,45 +1,78 @@
-let currentLevel = 1; // Default level
+let time, timer, totalQuestions, correctAnswers, startTime;
+
+function startPractice() {
+    time = document.getElementById('timeInput').value * 60; // Convert minutes to seconds
+    totalQuestions = 0;
+    correctAnswers = 0;
+    startTime = new Date().getTime();
+    generateQuestion();
+    timer = setInterval(countdown, 1000);
+}
 
 function generateQuestion() {
-    let operators, operator, num1, num2;
+    const operators = ['+', '-', '*'];
+    const operator = operators[Math.floor(Math.random() * operators.length)];
+    let num1, num2;
 
-    if (currentLevel === 1) {
-        // Level 1: Two-digit addition and subtraction, limited multiplication, and single-digit division
-        operators = ['+', '-', '*', '/'];
-        operator = operators[Math.floor(Math.random() * 2)]; // Either addition or subtraction
+    if (operator === '*') {
+        num1 = getRandomNumber(99);
+        num2 = getRandomNumber(12);
+    } else {
         num1 = getRandomNumber(99);
         num2 = getRandomNumber(99);
-        
-        if (operator === '*') {
-            // Limit multiplication to the multiplicand not exceeding 12
-            num1 = getRandomNumber(12);
-            num2 = getRandomNumber(9); // One digit multiplier
-        } else if (operator === '/') {
-            // Single-digit divisor for division
-            num1 = num1 * num2;
-            num2 = getRandomNumber(9) + 1; // Avoid division by zero
-        }
-    } else {
-        // For other levels, use a broader range
-        operators = ['+', '-', '*', '/'];
-        operator = operators[Math.floor(Math.random() * operators.length)];
-        num1 = getRandomNumber();
-        num2 = getRandomNumber();
     }
 
     const question = `${num1} ${operator} ${num2}`;
+    const userAnswer = prompt(`Question ${totalQuestions + 1}: ${question} = ?`);
 
-    const questionContainer = document.getElementById('question-container');
-    questionContainer.innerHTML = `<p>${question} = ?</p><button onclick="revealAnswer(${num1}, ${num2}, '${operator}')">Reveal Answer</button>`;
+    if (userAnswer !== null) {
+        const answer = calculateAnswer(num1, num2, operator);
+        checkAnswer(parseInt(userAnswer), answer);
+    }
 }
 
-function revealAnswer(num1, num2, operator) {
-    const answer = calculateAnswer(num1, num2, operator);
-    const questionContainer = document.getElementById('question-container');
-    questionContainer.innerHTML += `<p class="answer">Answer: ${answer}</p>`;
+function checkAnswer(userAnswer, correctAnswer) {
+    totalQuestions++;
+    if (userAnswer === correctAnswer) {
+        correctAnswers++;
+    }
+
+    if (time <= 0) {
+        endPractice();
+    } else {
+        generateQuestion();
+    }
 }
 
-function getRandomNumber(max = 999) {
+function endPractice() {
+    clearInterval(timer);
+    const endTime = new Date().getTime();
+    const totalTime = (endTime - startTime) / 1000; // Convert milliseconds to seconds
+    const averageTimePerQuestion = totalTime / totalQuestions;
+    const averageTimePerAddition = 0; // Placeholder for future implementation
+    const averageTimePerSubtraction = 0; // Placeholder for future implementation
+    const averageTimePerMultiplication = 0; // Placeholder for future implementation
+
+    alert(`
+        Practice Summary:
+        - Total Questions: ${totalQuestions}
+        - Correct Answers: ${correctAnswers}
+        - Incorrect Answers: ${totalQuestions - correctAnswers}
+        - Average Time Per Question: ${averageTimePerQuestion.toFixed(2)} seconds
+        - Average Time Per Addition Question: ${averageTimePerAddition.toFixed(2)} seconds
+        - Average Time Per Subtraction Question: ${averageTimePerSubtraction.toFixed(2)} seconds
+        - Average Time Per Multiplication Question: ${averageTimePerMultiplication.toFixed(2)} seconds
+    `);
+}
+
+function countdown() {
+    time--;
+    if (time <= 0) {
+        endPractice();
+    }
+}
+
+function getRandomNumber(max) {
     return Math.floor(Math.random() * (max + 1));
 }
 
@@ -51,14 +84,7 @@ function calculateAnswer(num1, num2, operator) {
             return num1 - num2;
         case '*':
             return num1 * num2;
-        case '/':
-            return num1 / num2;
         default:
             return NaN; // Handle unsupported operators
     }
-}
-
-function changeLevel(level) {
-    currentLevel = level;
-    // Additional logic for changing levels can be added here
 }
