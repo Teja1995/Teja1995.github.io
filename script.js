@@ -1,80 +1,108 @@
 let time, timer;
+let correctCount = 0;
+let incorrectCount = 0;
+let practiceOngoing = false;
+let timerPaused = false;
 
+// Function to start the practice session
 function startPractice() {
+    if (practiceOngoing || (correctCount > 0 || incorrectCount > 0)) {
+        const confirmation = confirm("Starting a new practice session will reset your progress. Are you sure you want to continue?");
+        if (!confirmation) return;
+    }
+
+    // Reset correct and incorrect counts
+    correctCount = 0;
+    incorrectCount = 0;
+    updateResult(); // Update result display
+
+    // Start practice session
     time = parseInt(document.getElementById('timeInput').value) * 60; // Convert minutes to seconds
     timer = setInterval(countdown, 1000);
+    practiceOngoing = true;
     generateQuestion(); // Call generateQuestion immediately after starting the practice
 }
 
+// Function to generate a question
 function generateQuestion() {
-    if (time <= 0) {
-        endPractice();
-        return;
-    }
-
+    if (!practiceOngoing) return; // Check if practice is ongoing
     const questionContainer = document.getElementById('question-container');
     questionContainer.innerHTML = ''; // Clear previous question
 
-    const num1 = Math.floor(Math.random() * 10) + 1; // Generate random numbers between 1 and 10
+    // Generate two random numbers between 1 and 10
+    const num1 = Math.floor(Math.random() * 10) + 1;
     const num2 = Math.floor(Math.random() * 10) + 1;
-    const operator = ['+', '-', '×'][Math.floor(Math.random() * 3)]; // Randomly select an operator
 
-    let question;
-    let correctAnswer;
+    // Generate a random operator (+, -, *)
+    const operators = ['+', '-', '×']; // Using '×' for multiplication symbol
+    const operator = operators[Math.floor(Math.random() * operators.length)];
 
+    let questionText, correctAnswer;
+
+    // Construct the question text and calculate the correct answer
     switch (operator) {
         case '+':
-            question = `${num1} + ${num2} = `;
+            questionText = `${num1} + ${num2} = `;
             correctAnswer = num1 + num2;
             break;
         case '-':
-            question = `${num1 + num2} - ${num2} = `;
+            questionText = `${num1 + num2} - ${num2} = `;
             correctAnswer = num1;
             break;
         case '×':
-            question = `${num1} × ${num2} = `;
+            questionText = `${num1} × ${num2} = `;
             correctAnswer = num1 * num2;
             break;
         default:
             break;
     }
 
+    // Create HTML elements to display the question and answer input field
     const questionElement = document.createElement('p');
-    questionElement.textContent = `Question: ${question}`;
+    questionElement.textContent = `Question: ${questionText}`;
 
     const answerInput = document.createElement('input');
     answerInput.type = 'text';
-
-    const submitButton = document.createElement('button');
-    submitButton.textContent = 'Submit Answer';
-    submitButton.onclick = function () {
-        const userAnswer = parseInt(answerInput.value);
-        if (!isNaN(userAnswer)) {
-            checkAnswer(userAnswer, correctAnswer);
-            generateQuestion();
+    answerInput.addEventListener('keydown', function(event) {
+        if (event.key === 'Enter') {
+            submitAnswer(answerInput, correctAnswer);
         }
-    };
+    });
 
+    // Append the question and answer elements to the question container
     questionContainer.appendChild(questionElement);
     questionContainer.appendChild(answerInput);
-    questionContainer.appendChild(submitButton);
+
+    answerInput.focus(); // Focus on the answer input field
 }
 
-function checkAnswer(userAnswer, correctAnswer) {
-    if (userAnswer === correctAnswer) {
-        alert('Correct!');
-    } else {
-        alert('Incorrect!');
+// Function to submit the answer
+function submitAnswer(answerInput, correctAnswer) {
+    const userAnswer = parseInt(answerInput.value);
+    if (!isNaN(userAnswer)) {
+        checkAnswer(userAnswer, correctAnswer);
+        if (practiceOngoing) {
+            generateQuestion(); // Update question after checking answer if practice ongoing
+            answerInput.focus(); // Focus back on the answer input field
+        }
     }
 }
 
-function endPractice() {
-    clearInterval(timer);
-    // Implement logic to display results here
+// Function to check the user's answer
+function checkAnswer(userAnswer, correctAnswer) {
+    if (userAnswer === correctAnswer) {
+        correctCount++;
+    } else {
+        incorrectCount++;
+    }
+    updateResult(); // Update the result display
 }
 
+// Function to handle the countdown timer
 function countdown() {
-    time--;
+    if (!timerPaused) {
+        time--;
+    }
 
     if (time <= 0) {
         endPractice();
@@ -84,4 +112,30 @@ function countdown() {
         const timerDisplay = document.getElementById('timer');
         timerDisplay.textContent = `Time Remaining: ${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
     }
+}
+
+// Function to update the result display
+function updateResult() {
+    const resultContainer = document.getElementById('result-container');
+    resultContainer.innerHTML = `
+        <p>Correct Answers: ${correctCount}</p>
+        <p>Incorrect Answers: ${incorrectCount}</p>
+    `;
+}
+
+// Function to pause the practice session
+function pausePractice() {
+    timerPaused = true;
+}
+
+// Function to resume the practice session
+function resumePractice() {
+    timerPaused = false;
+}
+
+// Function to end the practice session
+function endPractice() {
+    clearInterval(timer);
+    practiceOngoing = false; // Set practiceOngoing to false when practice ends
+    // Implement logic to display results here
 }
