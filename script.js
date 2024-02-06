@@ -57,25 +57,33 @@ function checkAnswer(userAnswer, correctAnswer) {
 
 function endPractice() {
     clearInterval(timer);
-    const endTime = new Date().getTime();
-    const totalTime = (endTime - startTime) / 1000; // Convert milliseconds to seconds
-    const averageTimePerQuestion = totalQuestions > 0 ? totalTime / totalQuestions : 0;
 
-    const resultContainer = document.getElementById('result-container');
-    resultContainer.innerHTML = `
-        <p>Total Questions: ${totalQuestions}</p>
-        <p>Correct Answers: ${correctAnswers}</p>
-        <p>Incorrect Answers: ${totalQuestions - correctAnswers}</p>
-        <p>Average Time Per Question: ${averageTimePerQuestion.toFixed(2)} seconds</p>
-    `;
+    // Check if the user has attempted at least one question
+    if (totalQuestions > 0) {
+        const endTime = new Date().getTime();
+        const totalTime = (endTime - startTime) / 1000; // Convert milliseconds to seconds
+        const averageTimePerQuestion = totalTime / totalQuestions;
 
-    // Reset question container and provide option to restart
+        const resultContainer = document.getElementById('result-container');
+        resultContainer.innerHTML = `
+            <p>Total Questions: ${totalQuestions}</p>
+            <p>Correct Answers: ${correctAnswers}</p>
+            <p>Incorrect Answers: ${totalQuestions - correctAnswers}</p>
+            <p>Average Time Per Question: ${averageTimePerQuestion.toFixed(2)} seconds</p>
+        `;
+    } else {
+        // If no questions were attempted, provide a message
+        const resultContainer = document.getElementById('result-container');
+        resultContainer.innerHTML = `
+            <p>No questions were attempted.</p>
+            <p>Press the button below to start a new practice session.</p>
+            <button onclick="resetPractice()">Start New Practice</button>
+        `;
+    }
+
+    // Reset question container
     const questionContainer = document.getElementById('question-container');
-    questionContainer.innerHTML = `
-        <p>Practice session has ended.</p>
-        <p>Press the button below to start a new practice session.</p>
-        <button onclick="resetPractice()">Start New Practice</button>
-    `;
+    questionContainer.innerHTML = '';
 }
 
 function resetPractice() {
@@ -86,7 +94,7 @@ function resetPractice() {
 function countdown() {
     time--;
 
-    if (time <= 0) {
+    if (time <= 0 && totalQuestions > 0) {
         endPractice();
     } else {
         const timerDisplay = document.getElementById('timer');
