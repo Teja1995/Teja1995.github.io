@@ -3,21 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Math Questions Generator</title>
+    <title>Math Practice</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
-        <h1>Math Questions Generator</h1>
-        <div class="tabs">
-            <button onclick="changeLevel(1)">Level 1</button>
-            <button onclick="changeLevel(2)">Level 2</button>
-            <button onclick="changeLevel('pro')">Pro</button>
-        </div>
-        <div id="question-container">
-            <!-- Questions will be inserted here dynamically -->
-        </div>
-        <button onclick="generateQuestion()">Generate Question</button>
+        <h1>Math Practice</h1>
+        <label for="timeInput">Enter Time (minutes):</label>
+        <input type="number" id="timeInput" min="1" placeholder="Enter time in minutes">
+        <button onclick="startPractice()">Start Practice</button>
     </div>
     <script src="script.js"></script>
 </body>
