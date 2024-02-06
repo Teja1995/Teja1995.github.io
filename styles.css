@@ -5,10 +5,19 @@ body {
     justify-content: center;
     align-items: center;
     height: 100vh;
+    padding: 10px;
+}
+
+.main-container {
+    text-align: center;
+    width: 100%;
+    max-width: 400px; /* Adjust as needed */
 }
 
 .container {
-    text-align: center;
+    border: 3px solid #333;
+    padding: 20px;
+    border-radius: 10px;
 }
 
 h1 {
@@ -59,9 +68,16 @@ button:hover {
     font-size: 18px;
 }
 
+#timer-container {
+    width: 100%;
+    text-align: center;
+}
+
 #timer {
     font-size: 20px;
     border: 3px solid #333;
     padding: 10px;
     border-radius: 10px;
+    display: inline-block;
+    min-width: 200px; /* Set a fixed width for the timer container */
 }
