@@ -9,15 +9,19 @@
 <body>
     <div class="container">
         <h1>Math Practice</h1>
-        <label for="timeInput">Enter Time (minutes):</label>
-        <input type="number" id="timeInput" min="1" placeholder="Enter time in minutes">
-        <button onclick="startPractice()">Start Practice</button>
-        <button onclick="pausePractice()">Pause</button>
-        <button onclick="resumePractice()">Resume</button>
+        <div class="input-container">
+            <label for="timeInput">Enter Time (minutes):</label>
+            <input type="number" id="timeInput" min="1" placeholder="Enter time in minutes">
+        </div>
+        <div class="button-container">
+            <button onclick="startPractice()">Start Practice</button>
+            <button onclick="pausePractice()">Pause</button>
+            <button onclick="resumePractice()">Resume</button>
+        </div>
+        <div id="question-container"></div>
+        <div id="result-container"></div>
+        <div id="timer"></div>
     </div>
-    <div id="question-container"></div>
-    <div id="result-container"></div>
-    <div id="timer"></div>
     <script src="script.js"></script>
 </body>
 </html>
