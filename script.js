@@ -1,10 +1,7 @@
-let time, timer, totalQuestions, correctAnswers, startTime;
+let time, timer;
 
 function startPractice() {
-    time = 60; // Set a fixed time for testing (in seconds)
-    totalQuestions = 0;
-    correctAnswers = 0;
-    startTime = new Date().getTime();
+    time = parseInt(document.getElementById('timeInput').value) * 60; // Convert minutes to seconds
     timer = setInterval(countdown, 1000);
     generateQuestion(); // Call generateQuestion immediately after starting the practice
 }
@@ -16,46 +13,14 @@ function generateQuestion() {
     }
 
     const questionContainer = document.getElementById('question-container');
-    questionContainer.innerHTML = '<p>Question: 2 + 2 = ?</p>';
+    questionContainer.innerHTML = '<p>Question: 2 + 2 = ?</p>'; // Placeholder question
 
-    const answerInput = document.createElement('input');
-    answerInput.type = 'text';
-    questionContainer.appendChild(answerInput);
-
-    const submitButton = document.createElement('button');
-    submitButton.textContent = 'Submit Answer';
-    submitButton.onclick = function () {
-        const userAnswer = parseInt(answerInput.value);
-        if (!isNaN(userAnswer)) {
-            const answer = 4; // Correct answer for testing
-            checkAnswer(userAnswer, answer);
-            generateQuestion();
-        }
-    };
-    questionContainer.appendChild(submitButton);
-}
-
-function checkAnswer(userAnswer, correctAnswer) {
-    totalQuestions++;
-    if (userAnswer === correctAnswer) {
-        correctAnswers++;
-    }
+    // Implement actual question generation logic here
 }
 
 function endPractice() {
     clearInterval(timer);
-
-    const endTime = new Date().getTime();
-    const totalTime = (endTime - startTime) / 1000; // Convert milliseconds to seconds
-    const averageTimePerQuestion = totalQuestions > 0 ? totalTime / totalQuestions : 0;
-
-    const resultContainer = document.getElementById('result-container');
-    resultContainer.innerHTML = `
-        <p>Total Questions: ${totalQuestions}</p>
-        <p>Correct Answers: ${correctAnswers}</p>
-        <p>Incorrect Answers: ${totalQuestions - correctAnswers}</p>
-        <p>Average Time Per Question: ${averageTimePerQuestion.toFixed(2)} seconds</p>
-    `;
+    // Implement logic to display results here
 }
 
 function countdown() {
@@ -64,16 +29,9 @@ function countdown() {
     if (time <= 0) {
         endPractice();
     } else {
+        const minutes = Math.floor(time / 60);
+        const seconds = time % 60;
         const timerDisplay = document.getElementById('timer');
-        timerDisplay.textContent = `Time Remaining: ${formatTime(time)}`;
+        timerDisplay.textContent = `Time Remaining: ${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
     }
 }
-
-function formatTime(seconds) {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
-}
-
-// Call the startPractice function when the page finishes loading
-document.addEventListener('DOMContentLoaded', startPractice);
