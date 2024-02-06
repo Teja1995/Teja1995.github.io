@@ -87,4 +87,4 @@ function calculateAnswer(num1, num2, operator) {
         default:
             return NaN; // Handle unsupported operators
     }
-}
+        }
