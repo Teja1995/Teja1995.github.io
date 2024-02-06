@@ -29,9 +29,12 @@ function generateQuestion() {
     const questionContainer = document.getElementById('question-container');
     questionContainer.innerHTML = ''; // Clear previous question
 
-    // Generate two random numbers between 1 and 10
-    const num1 = Math.floor(Math.random() * 10) + 1;
-    const num2 = Math.floor(Math.random() * 10) + 1;
+    let num1, num2;
+    do {
+        // Generate two random numbers between 10 and 99
+        num1 = Math.floor(Math.random() * 90) + 10;
+        num2 = Math.floor(Math.random() * 90) + 10;
+    } while (num1 === num2); // Ensure num1 and num2 are not equal
 
     // Generate a random operator (+, -, *)
     const operators = ['+', '-', '×']; // Using '×' for multiplication symbol
@@ -46,8 +49,12 @@ function generateQuestion() {
             correctAnswer = num1 + num2;
             break;
         case '-':
-            questionText = `${num1 + num2} - ${num2} = `;
-            correctAnswer = num1;
+            // Ensure num1 is greater than num2 to avoid negative results
+            if (num1 < num2) {
+                [num1, num2] = [num2, num1]; // Swap num1 and num2
+            }
+            questionText = `${num1} - ${num2} = `;
+            correctAnswer = num1 - num2;
             break;
         case '×':
             questionText = `${num1} × ${num2} = `;
@@ -76,13 +83,15 @@ function generateQuestion() {
     answerInput.focus(); // Focus on the answer input field
 }
 
+
+
 // Function to submit the answer
 function submitAnswer(answerInput, correctAnswer) {
     const userAnswer = parseInt(answerInput.value);
     if (!isNaN(userAnswer)) {
         checkAnswer(userAnswer, correctAnswer);
-        if (practiceOngoing) {
-            generateQuestion(); // Update question after checking answer if practice ongoing
+        if (practiceOngoing && !timerPaused) {
+            generateQuestion(); // Update question after checking answer if practice ongoing and not paused
             answerInput.focus(); // Focus back on the answer input field
         }
     }
@@ -90,13 +99,16 @@ function submitAnswer(answerInput, correctAnswer) {
 
 // Function to check the user's answer
 function checkAnswer(userAnswer, correctAnswer) {
-    if (userAnswer === correctAnswer) {
-        correctCount++;
-    } else {
-        incorrectCount++;
+    if (practiceOngoing && !timerPaused) {
+        if (userAnswer === correctAnswer) {
+            correctCount++;
+        } else {
+            incorrectCount++;
+        }
+        updateResult(); // Update the result display only if not paused
     }
-    updateResult(); // Update the result display
 }
+
 
 // Function to handle the countdown timer
 function countdown() {
@@ -131,6 +143,7 @@ function pausePractice() {
 // Function to resume the practice session
 function resumePractice() {
     timerPaused = false;
+    generateQuestion(); // Generate a new question upon resuming
 }
 
 // Function to end the practice session
