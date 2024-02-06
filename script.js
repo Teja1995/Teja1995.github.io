@@ -75,5 +75,5 @@ function formatTime(seconds) {
     return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
 }
 
-// Call the startPractice function immediately on page load
-startPractice();
+// Call the startPractice function when the page finishes loading
+document.addEventListener('DOMContentLoaded', startPractice);
