@@ -5,8 +5,8 @@ function startPractice() {
     totalQuestions = 0;
     correctAnswers = 0;
     startTime = new Date().getTime();
-    generateQuestion();
     timer = setInterval(countdown, 1000);
+    generateQuestion(); // Call generateQuestion immediately after starting the practice
 }
 
 function generateQuestion() {
