@@ -1,3 +1,3 @@
 function startPractice() {
-    document.getElementById('result-container').innerHTML = 'startPractice function is executed';
+    alert('Math Practice is working!');
 }
