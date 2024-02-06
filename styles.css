@@ -13,15 +13,8 @@ body {
     text-align: center;
 }
 
-button {
-    padding: 10px 20px;
+input, button {
+    margin-top: 10px;
+    padding: 5px;
     font-size: 16px;
-    margin-top: 20px;
-    cursor: pointer;
-}
-
-/* Style for the revealed answer */
-#question-container p.answer {
-    color: #007bff; /* Change to your preferred color */
-    font-weight: bold;
 }
