@@ -1,6 +1,7 @@
 let time, timer, totalQuestions, correctAnswers, startTime;
 
 function startPractice() {
+    alert('startPractice function is executed');
     time = document.getElementById('timeInput').value * 60; // Convert minutes to seconds
     totalQuestions = 0;
     correctAnswers = 0;
