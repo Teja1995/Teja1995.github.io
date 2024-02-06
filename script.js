@@ -9,7 +9,6 @@ function startPractice() {
     generateQuestion(); // Call generateQuestion immediately after starting the practice
 }
 
-
 function generateQuestion() {
     if (time <= 0) {
         endPractice();
@@ -77,4 +76,3 @@ function formatTime(seconds) {
 }
 
 startPractice(); // Test the startPractice function immediately on page load
-        
