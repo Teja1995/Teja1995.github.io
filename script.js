@@ -10,6 +10,11 @@ function startPractice() {
 }
 
 function generateQuestion() {
+    if (time <= 0) {
+        endPractice();
+        return;
+    }
+
     const operators = ['+', '-', '*'];
     const operator = operators[Math.floor(Math.random() * operators.length)];
     let num1, num2;
@@ -24,9 +29,7 @@ function generateQuestion() {
 
     const question = `${num1} ${operator} ${num2}`;
     const questionContainer = document.getElementById('question-container');
-    const questionElement = document.createElement('p');
-    questionElement.textContent = `Question ${totalQuestions + 1}: ${question} = ?`;
-    questionContainer.appendChild(questionElement);
+    questionContainer.innerHTML = `<p>Question ${totalQuestions + 1}: ${question} = ?</p>`;
 
     const answerInput = document.createElement('input');
     answerInput.type = 'text';
@@ -39,8 +42,6 @@ function generateQuestion() {
         if (!isNaN(userAnswer)) {
             const answer = calculateAnswer(num1, num2, operator);
             checkAnswer(userAnswer, answer);
-            questionContainer.removeChild(questionElement);
-            questionContainer.removeChild(answerInput);
             generateQuestion();
         }
     };
@@ -52,20 +53,13 @@ function checkAnswer(userAnswer, correctAnswer) {
     if (userAnswer === correctAnswer) {
         correctAnswers++;
     }
-
-    if (time <= 0) {
-        endPractice();
-    }
 }
 
 function endPractice() {
     clearInterval(timer);
     const endTime = new Date().getTime();
     const totalTime = (endTime - startTime) / 1000; // Convert milliseconds to seconds
-    const averageTimePerQuestion = totalTime / totalQuestions;
-    const averageTimePerAddition = 0; // Placeholder for future implementation
-    const averageTimePerSubtraction = 0; // Placeholder for future implementation
-    const averageTimePerMultiplication = 0; // Placeholder for future implementation
+    const averageTimePerQuestion = totalQuestions > 0 ? totalTime / totalQuestions : 0;
 
     const resultContainer = document.getElementById('result-container');
     resultContainer.innerHTML = `
@@ -73,17 +67,24 @@ function endPractice() {
         <p>Correct Answers: ${correctAnswers}</p>
         <p>Incorrect Answers: ${totalQuestions - correctAnswers}</p>
         <p>Average Time Per Question: ${averageTimePerQuestion.toFixed(2)} seconds</p>
-        <p>Average Time Per Addition Question: ${averageTimePerAddition.toFixed(2)} seconds</p>
-        <p>Average Time Per Subtraction Question: ${averageTimePerSubtraction.toFixed(2)} seconds</p>
-        <p>Average Time Per Multiplication Question: ${averageTimePerMultiplication.toFixed(2)} seconds</p>
     `;
 }
 
 function countdown() {
     time--;
+
     if (time <= 0) {
         endPractice();
+    } else {
+        const timerDisplay = document.getElementById('timer');
+        timerDisplay.textContent = `Time Remaining: ${formatTime(time)}`;
     }
+}
+
+function formatTime(seconds) {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds < 10 ? '0' : ''}${remainingSeconds}`;
 }
 
 function getRandomNumber(max) {
@@ -101,4 +102,5 @@ function calculateAnswer(num1, num2, operator) {
         default:
             return NaN; // Handle unsupported operators
     }
-}
+        }
+                  
