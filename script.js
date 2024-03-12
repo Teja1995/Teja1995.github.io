@@ -84,14 +84,33 @@ function generateQuestion() {
     const questionContainer = document.getElementById('question-container');
     questionContainer.innerHTML = ''; // Clear previous question
 
-    const questionType = Math.random() < 0.5 ? 'arithmetic' : 'percentage'; // Randomly select question type
+    const questionType = Math.random(); // Randomly select question type
 
-    if (questionType === 'arithmetic') {
+    if (questionType < 0.33) {
         generateArithmeticQuestion(questionContainer);
+    } else if (questionType < 0.67) {
+        generateMultiplicationQuestion(questionContainer);
     } else {
         generatePercentageQuestion(questionContainer);
     }
 }
+
+// Function to generate a multiplication question
+function generateMultiplicationQuestion(questionContainer) {
+    let num1, num2;
+    do {
+        num1 = Math.floor(Math.random() * 800) + 100; // Random three-digit number not multiple of 100
+        num2 = Math.floor(Math.random() * 8) + 2; // Random single-digit number between 2 and 9
+    } while (num1 % 100 === 0); // Ensure num1 is not a multiple of 100
+
+    const questionText = `${num1} × ${num2} = `;
+    const correctAnswer = num1 * num2;
+
+    // Display the multiplication question
+    displayQuestion(questionContainer, questionText, correctAnswer);
+}
+
+
 
 
 // Function to generate an arithmetic question
@@ -139,11 +158,11 @@ function generateArithmeticQuestion(questionContainer) {
 // Function to generate a percentage question
 function generatePercentageQuestion(questionContainer) {
     let numerator, denominator;
-	let questionText, correctAnswer, userAnswer;
+    let questionText, correctAnswer;
     do {
-        numerator = Math.floor(Math.random() * 15) + 2; // Random number between 2 and 16
         denominator = Math.floor(Math.random() * 15) + 2; // Random number between 2 and 16
-    } while (denominator === 7 || denominator === 13 || denominator === 14); // Exclude 7, 13, and 14
+        numerator = Math.floor(Math.random() * (denominator * 2 - 1)) + 1; // Random number between 1 and 2 times the denominator
+    } while (numerator === denominator || numerator > denominator * 2); // Ensure numerator is not the same as denominator and not more than twice the denominator
 
     questionText = `What is ${numerator}/${denominator} as a percentage?`;
     correctAnswer = ((numerator / denominator) * 100).toFixed(2); // Round off to two decimal places
@@ -151,6 +170,8 @@ function generatePercentageQuestion(questionContainer) {
     // Display the percentage question
     displayQuestion(questionContainer, questionText, correctAnswer);
 }
+
+
 
 
 
