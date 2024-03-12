@@ -1,6 +1,7 @@
+/* Updated CSS with styles for result and correct answer containers */
 body {
     background-color: #f5f5f5;
-    font-family: Arial, sans-serif;
+    font-family: Helvetica, Arial, sans-serif; /* Convert font to Helvetica */
     display: flex;
     justify-content: center;
     align-items: center;
@@ -66,6 +67,18 @@ button:hover {
 #result-container {
     margin-bottom: 20px;
     font-size: 18px;
+}
+
+.correct-answer-container {
+    margin-top: 10px;
+    padding: 5px;
+    background-color: #f8f8f8;
+    border: 3px solid #ccc; /* Change border-width property */
+    border-radius: 5px;
+    margin-bottom: 20px; /* Add space of 20px between result container and next element */
+    font-size: 18px;
+    border-style: solid; /* Ensure border style is solid */
+    font-weight: bold; /* Make the font bold */
 }
 
 #timer-container {
