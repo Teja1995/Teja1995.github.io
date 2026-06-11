@@ -73,7 +73,7 @@ firebase-config.js  — Firebase project credentials + initialises firebase + db
 |---|---|
 | Authentication | Firebase Auth (Google provider) — compat CDN v9.23.0 |
 | Database | Firebase Realtime Database — compat CDN v9.23.0 |
-| Worksheet AI | Google Gemini 1.5 Flash (vision) via REST API |
+| Worksheet AI | Google Gemini 2.5 Flash (vision) via REST API — v1beta endpoint |
 | PDF rendering | pdf.js v3.11.174 (CDN) |
 | Charts | Chart.js v4.4.0 (CDN) |
 | Fonts | Inter (Google Fonts) |
@@ -165,7 +165,7 @@ Apply in: Firebase Console → Realtime Database → Rules → Publish.
 | Decision | Reason |
 |---|---|
 | Realtime Database instead of Firestore | Firestore requires billing/card details; RTDB free tier does not |
-| Gemini 1.5 Flash instead of 2.0 Flash | 2.0 Flash has stricter free-tier quota; 1.5 Flash is more reliably free |
+| Gemini 2.5 Flash (v1beta) | 2.0 Flash and 1.5 Flash show 0/0 RPM on free tier keys; 2.5 Flash has 5 RPM quota on AI Studio keys |
 | API key stored in Firebase (not only localStorage) | Mobile browsers can clear localStorage; Firebase ensures key persists across logins and devices |
 | No prefix validation on Gemini key | Original `AIza` check was wrong — rejected valid keys; wrong keys now fail gracefully at the API |
 | CDN compat SDK (not ES modules) | No build step needed; works directly on GitHub Pages |
