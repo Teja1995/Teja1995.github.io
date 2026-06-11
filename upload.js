@@ -186,34 +186,57 @@ async function callOpenAICompatAPI(model, base64, mimeType, apiKey) {
 }
 
 function parseAIJSON(text) {
-    // Strip markdown fences the model sometimes wraps around JSON
-    const stripped = text.replace(/```[a-z]*\n?/gi, '').trim();
+    // Strip all markdown fences (```json ... ``` or ``` ... ```)
+    const stripped = text.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim();
 
-    const match = stripped.match(/\[[\s\S]*\]/);
-    if (!match) throw new Error('The AI did not return a recognisable answer list. Try again.');
+    // Use a specific pattern: array of objects [ { … } ] rather than any [ … ]
+    // This avoids matching things like "[note: 4 columns]" that appear before the real array
+    const match = stripped.match(/\[\s*\{[\s\S]*\}\s*\]/);
+    if (!match) {
+        console.error('[worksheet] No JSON object-array found. Raw model output:', text.slice(0, 500));
+        throw new Error('The AI did not return a recognisable answer list. Try again.');
+    }
 
-    let jsonStr = match[0];
+    let j = match[0];
 
-    // Pass 1 – direct parse (ideal path)
-    try { return JSON.parse(jsonStr); } catch {}
+    // Pass 1 – direct parse (happy path)
+    try { return JSON.parse(j); } catch {}
 
-    // Pass 2 – remove trailing commas before ] or } (very common model mistake)
+    // Pass 2 – strip trailing commas before ] or }  (most common Groq/OpenRouter issue)
+    try { return JSON.parse(j.replace(/,\s*([}\]])/g, '$1')); } catch {}
+
+    // Pass 3 – truncate to last fully-closed object (handles cut-off responses)
     try {
-        const cleaned = jsonStr.replace(/,\s*([}\]])/g, '$1');
-        return JSON.parse(cleaned);
-    } catch {}
-
-    // Pass 3 – truncate to last fully-closed object in case the response was cut off
-    try {
-        const lastBrace = jsonStr.lastIndexOf('}');
-        if (lastBrace > 0) {
-            const truncated = (jsonStr.slice(0, lastBrace + 1) + ']').replace(/,\s*([}\]])/g, '$1');
-            const parsed = JSON.parse(truncated);
+        const last = j.lastIndexOf('}');
+        if (last > 0) {
+            const truncated = j.slice(0, last + 1) + ']';
+            const parsed = JSON.parse(truncated.replace(/,\s*([}\]])/g, '$1'));
             if (parsed.length > 0) return parsed;
         }
     } catch {}
 
-    throw new Error('Could not read the AI response — the model returned malformed JSON. Please try again.');
+    // Pass 4 – model used single quotes instead of double quotes
+    try {
+        const dq = j
+            .replace(/:\s*'([^']*)'/g,  ': "$1"')   // string values
+            .replace(/([{,]\s*)'(\w+)'\s*:/g, '$1"$2":') // keys
+            .replace(/,\s*([}\]])/g, '$1');          // trailing commas
+        return JSON.parse(dq);
+    } catch {}
+
+    // Pass 5 – extract every {...} block individually and build the array manually
+    try {
+        const objects = [];
+        const objPattern = /\{[^{}]*\}/g;
+        let m;
+        while ((m = objPattern.exec(j)) !== null) {
+            try { objects.push(JSON.parse(m[0].replace(/,\s*([}\]])/g, '$1'))); } catch {}
+        }
+        if (objects.length > 0) return objects;
+    } catch {}
+
+    console.error('[worksheet] All parse passes failed. Raw model output:', text.slice(0, 600));
+    throw new Error('The AI returned a response this app could not read. Please try again or switch models in Settings.');
 }
 
 async function callModel(model, { base64, mimeType }, apiKey) {
