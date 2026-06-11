@@ -41,11 +41,17 @@ firebase-config.js  — Firebase project credentials + initialises firebase + db
 - Student uploads a photo (JPG/PNG) or scan (PDF) of a completed handwritten worksheet
 - PDF: rendered to canvas via pdf.js (page 1 only), then sent as JPEG base64
 - Image: read as base64 via FileReader
-- Sent to **Gemini 1.5 Flash** vision API with a structured prompt
+- Sent to **Gemini 2.5 Flash** (`v1beta` endpoint) vision API with a structured prompt
 - Gemini returns JSON: `[{question, studentAnswer, correctAnswer, isCorrect}]`
 - Results displayed as a table with ✓ / ✗ per question and a correct/wrong summary
 
-**Important — API key source:** Keys must come from **aistudio.google.com/app/apikey**, NOT from Google Cloud Console. Cloud Console keys have 0 free-tier quota for Gemini and will throw a quota error immediately.
+**Worksheet prompt design:** Worksheets typically have 4 columns of problems in `num + num = ____` format. The prompt explicitly instructs the model to:
+- Read column by column, left to right, top to bottom within each column
+- Only look at the blank/underscored space immediately after `=` on the same line for the student's answer
+- Never borrow a number from the next question as the current answer
+- Mark unanswered blanks as `studentAnswer: "blank"` rather than guessing
+
+**Important — API key source:** Keys must come from **aistudio.google.com/app/apikey**, NOT from Google Cloud Console. Cloud Console keys have 0 free-tier quota and throw a quota error immediately. Gemini 2.0 Flash and 1.5 Flash also show 0/0 RPM on free-tier AI Studio keys — only 2.5 Flash has confirmed free quota (5 RPM).
 
 ### 4. My Performance Tab
 - Line chart (Chart.js): X = session date, Y = questions per minute
@@ -154,9 +160,15 @@ Apply in: Firebase Console → Realtime Database → Rules → Publish.
 ## Gemini API Key (per user, not developer)
 
 - Each user gets their own free key from **aistudio.google.com/app/apikey**
-- Free tier: 1,500 requests/day, 15 requests/minute — sufficient for worksheet checking
+- Free tier for Gemini 2.5 Flash: 5 RPM, 250K TPM — sufficient for worksheet checking
 - Key is saved to Firebase RTDB on first entry and restored automatically on every subsequent login
+- On login: key is read from Firebase first, then stored in localStorage as a fast cache
 - No format validation on the key — invalid keys fail at the Gemini API with a clear error message
+
+**Model selection history:**
+- `gemini-2.0-flash` (v1beta) — tried first; shows 0/0 RPM on free AI Studio keys → abandoned
+- `gemini-1.5-flash` (v1beta then v1) — not found on either endpoint → abandoned
+- `gemini-2.5-flash` (v1beta) — confirmed 5 RPM free quota on AI Studio keys → current choice
 
 ---
 
@@ -165,7 +177,9 @@ Apply in: Firebase Console → Realtime Database → Rules → Publish.
 | Decision | Reason |
 |---|---|
 | Realtime Database instead of Firestore | Firestore requires billing/card details; RTDB free tier does not |
-| Gemini 2.5 Flash (v1beta) | 2.0 Flash and 1.5 Flash show 0/0 RPM on free tier keys; 2.5 Flash has 5 RPM quota on AI Studio keys |
+| Gemini 2.5 Flash (v1beta) | 2.0 Flash and 1.5 Flash show 0/0 RPM on free tier AI Studio keys; 2.5 Flash has confirmed 5 RPM quota |
 | API key stored in Firebase (not only localStorage) | Mobile browsers can clear localStorage; Firebase ensures key persists across logins and devices |
-| No prefix validation on Gemini key | Original `AIza` check was wrong — rejected valid keys; wrong keys now fail gracefully at the API |
+| No prefix validation on Gemini key | Original `AIza` check rejected some valid keys; wrong keys now fail gracefully at the API call |
 | CDN compat SDK (not ES modules) | No build step needed; works directly on GitHub Pages |
+| Detailed column-aware Gemini prompt | Generic prompt caused model to read numbers from adjacent rows as answers; explicit layout rules fixed accuracy |
+| AI Studio key required (not Cloud Console) | Cloud Console keys have 0 free-tier quota for Gemini regardless of model; AI Studio keys get free RPM allocation |
