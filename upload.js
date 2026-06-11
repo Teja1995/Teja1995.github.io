@@ -98,13 +98,16 @@ const WORKSHEET_PROMPT =
 STEP 1 — Correct for orientation.
 The photo may be taken at an angle or rotated. Before reading anything, mentally straighten the image so the text is upright and level.
 
-STEP 2 — Identify the columns.
-The worksheet is divided into vertical columns — think of them like columns in a newspaper, running top to bottom. There are usually 4 such columns side by side. Identify where each column starts and ends horizontally.
+STEP 2 — Count every = sign in the image.
+Scan the entire image and count every printed = sign you can see. Each = sign is exactly one problem. Write this number down mentally — your final output array must contain exactly this many items. Do not proceed until you have counted every = sign including those in the rightmost columns.
 
-STEP 3 — Read one complete column at a time, left to right.
+STEP 3 — Identify the columns.
+The worksheet is divided into vertical columns — like columns in a newspaper, running top to bottom. There are usually 4 such columns side by side. Identify where each column starts and ends horizontally before you start reading.
+
+STEP 4 — Read one complete column at a time, left to right.
 Pick the leftmost column. Read every problem in it from top to bottom. Finish the entire column before moving to the next one. Do NOT scan horizontally across the page.
 
-STEP 4 — Use the printed = sign as your anchor for each line.
+STEP 5 — Use the printed = sign as your anchor for each line.
 Every problem has a printed = sign. Use it as your anchor:
   • Find the = sign on the line.
   • Read LEFT along the exact same horizontal level as that = sign: this gives you NUMBER operator NUMBER (the question).
@@ -116,20 +119,21 @@ Example of what goes wrong without this rule:
   Line 1:  1 + 2 = ___
   Line 2:  3 + 4 = ___
 Wrong reading: "3 + 2" (3 from line 2, but 2 borrowed from line 1 above) ✗
-Correct reading: "3 + 4" (both numbers on the same line as the = sign on line 2) ✓
+Correct reading: "3 + 4" (both numbers on the same horizontal level as the = sign on line 2) ✓
 
-STEP 5 — Transcribe the student's answer.
+STEP 6 — Transcribe the student's answer.
 Look only at the blank space to the right of the = sign on that same line.
   • Any writing, even faint pencil — transcribe it exactly as written.
   • Completely empty blank — use "blank".
   • Something written but unreadable — use "unreadable".
 
+STEP 7 — Verify before returning.
+Count the items in your output array. It must equal the number of = signs you counted in Step 2. If it is less, you have missed problems — go back, find the missing = signs, and add them.
+
 For each problem output exactly this JSON shape:
   {"question":"47 + 83","studentAnswer":"130","correctAnswer":"","isCorrect":false}
 
 Always set correctAnswer to "" and isCorrect to false — the app computes these itself.
-
-A full worksheet page has 20–30 problems across 4 columns. If your output has fewer than 15 items, you have missed columns — go back and check each column again.
 
 Return ONLY a JSON array with no explanation, no markdown, and no text outside the array:
 [{"question":"47 + 83","studentAnswer":"130","correctAnswer":"","isCorrect":false}, ...]`;
@@ -147,7 +151,7 @@ async function callGeminiAPI(model, base64, mimeType, apiKey) {
                     { inline_data: { mime_type: mimeType, data: base64 } }
                 ]
             }],
-            generationConfig: { temperature: 0.1, maxOutputTokens: 8192 }
+            generationConfig: { temperature: 0, maxOutputTokens: 8192 }
         })
     });
     if (!response.ok) {
@@ -181,7 +185,7 @@ async function callOpenAICompatAPI(model, base64, mimeType, apiKey) {
                     { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } }
                 ]
             }],
-            temperature: 0.1,
+            temperature: 0,
             max_tokens: 8192
         })
     });
