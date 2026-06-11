@@ -101,7 +101,7 @@ SCAN THE WHOLE IMAGE FIRST: Before reading any answers, look at the entire image
 
 WORKSHEET FORMAT: Each problem is printed as NUMBER [operator] NUMBER = ______ where the blank underlined space is where the student writes their answer. Process left to right across columns, then top to bottom within each column. Each problem occupies exactly one row — do not borrow numbers from the row above or below.
 
-STUDENT ANSWER: Look only at the space immediately after = on that problem's line. If there is handwriting, transcribe it. If the space is empty or only shows the printed underline, write "blank". Never use a number from the next printed question as the current answer.
+STUDENT ANSWER: Look only at the space immediately after = on that problem's line. If there is handwriting — even faint pencil marks — transcribe it exactly. Only write "blank" if the space is truly empty with no marks at all. Never use a number from the next printed question as the current answer.
 
 isCorrect is true only when: (a) studentAnswer is not "blank" or "unreadable", and (b) it equals the mathematically correct answer. Allow 0.01 difference for decimals and percentages.
 
@@ -358,14 +358,61 @@ async function checkWorksheet() {
     alert('Could not check worksheet: ' + (lastError?.message || 'Unknown error'));
 }
 
+// ─── Client-side math verification ────────────────────────────
+// The model reads the question and the student's handwriting.
+// We compute the correct answer ourselves so model math errors don't
+// affect the final isCorrect judgement.
+
+function computeAnswer(questionStr) {
+    const q = String(questionStr || '').replace(/\s*=\s*\??$/, '').trim();
+
+    let m;
+    // Addition:  31 + 29
+    m = q.match(/^(\d+)\s*\+\s*(\d+)$/);
+    if (m) return String(parseInt(m[1]) + parseInt(m[2]));
+
+    // Subtraction: 45 - 12  or  45 − 12
+    m = q.match(/^(\d+)\s*[−\-]\s*(\d+)$/);
+    if (m) return String(parseInt(m[1]) - parseInt(m[2]));
+
+    // Multiplication: 3 × 4  or  3 x 4
+    m = q.match(/^(\d+)\s*[×x\*]\s*(\d+)$/i);
+    if (m) return String(parseInt(m[1]) * parseInt(m[2]));
+
+    // Percentage: 3 / 8 as a percentage
+    m = q.match(/^(\d+)\s*\/\s*(\d+)\s*as\s*a\s*percentage/i);
+    if (m) return ((parseInt(m[1]) / parseInt(m[2])) * 100).toFixed(2);
+
+    return null; // unrecognised format — leave model's value unchanged
+}
+
+function verifyMath(results) {
+    return results.map(r => {
+        const computed = computeAnswer(r.question);
+        if (computed === null) return r; // can't parse, leave as-is
+
+        r.correctAnswer = computed; // override model's answer with ours
+
+        const s = String(r.studentAnswer || '').trim().toLowerCase();
+        if (s === 'blank' || s === 'unreadable' || s === '') {
+            r.isCorrect = false;
+        } else {
+            r.isCorrect = Math.abs(parseFloat(s) - parseFloat(computed)) < 0.01;
+        }
+        return r;
+    });
+}
+
 // ─── Results rendering ─────────────────────────────────────────
 
 function displayWorksheetResults(results, model) {
     const tbody = document.getElementById('results-tbody');
     tbody.innerHTML = '';
 
-    // Safety net: blank/unreadable answers can never be marked correct,
-    // regardless of what the model returned
+    // Compute correct answers ourselves — model math can't be trusted
+    results = verifyMath(results);
+
+    // Safety net: blank/unreadable answers can never be marked correct
     results.forEach(r => {
         const s = String(r.studentAnswer).toLowerCase();
         if (s === 'blank' || s === 'unreadable') r.isCorrect = false;

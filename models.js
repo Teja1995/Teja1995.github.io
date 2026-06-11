@@ -37,7 +37,7 @@ const MODELS = [
         provider: 'Groq',
         tag: 'Fastest',
         tagClass: 'tag-fast',
-        accuracy: 4,
+        accuracy: 3,
         rpmLabel: '30 req / min',
         keyStorageKey: 'groqApiKey',
         dbKey: 'groqKey',

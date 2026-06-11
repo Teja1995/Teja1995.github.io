@@ -101,9 +101,11 @@ Models (especially Groq/OpenRouter) frequently return malformed or decorated JSO
 | # | Model | Provider | Stars | Free RPM | localStorage key | Firebase key |
 |---|---|---|---|---|---|---|
 | 1 | Gemini 2.5 Flash | Google AI Studio | ★★★★★ | 5 RPM | `geminiApiKey` | `geminiKey` |
-| 2 | Llama 4 Scout | Groq | ★★★★ | 30 RPM | `groqApiKey` | `groqKey` |
-| 3 | Gemini 2.0 Flash (free) | OpenRouter | ★★★★ | Varies | `openrouterApiKey` | `openrouterKey` |
+| 2 | Gemini 2.0 Flash (free) | OpenRouter | ★★★★ | Varies | `openrouterApiKey` | `openrouterKey` |
+| 3 | Llama 4 Scout | Groq | ★★★ | 30 RPM | `groqApiKey` | `groqKey` |
 | 4 | Qwen 2.5 VL 72B (free) | OpenRouter | ★★★ | Varies | `openrouterApiKey` | `openrouterKey` |
+
+Note: Llama 4 Scout accuracy was downgraded from ★★★★ to ★★★ after real-world testing showed inconsistent handwriting recognition, incorrect correctAnswer computation, and intermittent column-skipping.
 
 Notes:
 - OpenRouter models 3 and 4 share the same API key; saving either updates the same Firebase field
@@ -279,3 +281,5 @@ Apply in: Firebase Console → Realtime Database → Rules → Publish.
 | AI Studio key required for Gemini (not Cloud Console) | Cloud Console keys have 0 free-tier quota for Gemini regardless of model |
 | models.js loaded before auth.js | auth.js iterates MODELS to restore keys; models.js must exist as a global first |
 | Operation selection saved to localStorage | Students often practice the same type each day; persisting the chip selection avoids re-selecting every visit |
+| Client-side math verification (`computeAnswer` + `verifyMath` in upload.js) | AI models — especially Llama 4 Scout — miscalculate correct answers and flag answers wrong even when the student is right; computing the correct answer in JS eliminates this entirely. Models now only need to read handwriting; we do the math. |
+| Llama 4 Scout accuracy downgraded to ★★★ | Real-world testing showed inconsistent handwriting recognition, wrong correctAnswer values, and intermittent column-skipping — not consistent with ★★★★ performance |
