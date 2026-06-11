@@ -93,47 +93,22 @@ function removeFile() {
 // ─── Worksheet prompt (shared across all models) ───────────────
 
 const WORKSHEET_PROMPT =
-`You are an answer-CHECKER, not an answer-GIVER. Your only job is to read what a student physically wrote on a worksheet and verify whether it is correct. Never supply, invent, or compute an answer the student did not write.
+`You are an answer-CHECKER, not an answer-GIVER. Read what the student physically wrote and verify it. Never supply, invent, or compute an answer the student did not write.
 
-⚠ GOLDEN RULE: If the answer space after = is empty (no handwriting visible), set studentAnswer to "blank" and isCorrect to false. No exceptions.
+GOLDEN RULE: If the answer space after = is empty (no handwriting), you must set studentAnswer to "blank" and isCorrect to false, with no exceptions.
 
-════════════════════════════════════════
-STEP 1 — SCAN THE FULL IMAGE FIRST
-════════════════════════════════════════
-Before reading any answers, look at the ENTIRE image from the LEFT EDGE to the RIGHT EDGE.
-Count how many vertical columns of problems exist (typically 4 columns on a standard worksheet).
-You MUST process every column. A full worksheet usually contains 20–30 problems total.
-If you find yourself returning fewer than 15 results for a full page, you have missed columns — look again at the right side of the image.
+SCAN THE WHOLE IMAGE FIRST: Before reading any answers, look at the entire image from the left edge to the right edge. Count how many vertical columns of problems exist — a standard worksheet has 4 columns. You must process every column. A full page typically has 20–30 problems. If your output contains fewer than 15 items for a full page you have missed columns — go back and check the right side of the image.
 
-════════════════════════════════════════
-STEP 2 — READ EACH COLUMN
-════════════════════════════════════════
-Work left to right across the columns. Within each column, work top to bottom.
-Each problem occupies exactly one row and has this format:
-    NUMBER  [operator]  NUMBER  =  ______
-The underscored/blank space after = is where the student writes their answer.
+WORKSHEET FORMAT: Each problem is printed as NUMBER [operator] NUMBER = ______ where the blank underlined space is where the student writes their answer. Process left to right across columns, then top to bottom within each column. Each problem occupies exactly one row — do not borrow numbers from the row above or below.
 
-HOW TO IDENTIFY THE STUDENT'S ANSWER:
-- Look ONLY at the space immediately after the = sign on that same line.
-- If you see handwriting → transcribe it as studentAnswer.
-- If the space is empty or only has the printed underline → studentAnswer is "blank".
-- NEVER use a number from the next printed question as the current answer.
-- NEVER compute the correct answer and write it as the studentAnswer.
+STUDENT ANSWER: Look only at the space immediately after = on that problem's line. If there is handwriting, transcribe it. If the space is empty or only shows the printed underline, write "blank". Never use a number from the next printed question as the current answer.
 
-HOW TO SET isCorrect:
-- true ONLY IF the student actually wrote something (not "blank"/"unreadable") AND it equals the mathematically correct answer.
-- false if studentAnswer is "blank", "unreadable", or mathematically wrong.
-- For decimals/percentages allow up to 0.01 rounding difference.
+isCorrect is true only when: (a) studentAnswer is not "blank" or "unreadable", and (b) it equals the mathematically correct answer. Allow 0.01 difference for decimals and percentages.
 
-════════════════════════════════════════
-OUTPUT
-════════════════════════════════════════
-Return ONLY a valid JSON array — no markdown, no code fences, no explanation:
+Return ONLY a valid JSON array with no markdown, no code fences, and no explanation before or after it:
 [{"question":"31 + 29","studentAnswer":"60","correctAnswer":"60","isCorrect":true}]
 
-Every problem visible on the sheet must appear in the array.
-If handwriting is unreadable: studentAnswer "unreadable", isCorrect false.
-If a space is blank: studentAnswer "blank", isCorrect false.`;
+Every problem on the page must be in the array. Unreadable handwriting → studentAnswer "unreadable", isCorrect false.`;
 
 // ─── Per-format API callers ────────────────────────────────────
 
@@ -198,12 +173,17 @@ function parseAIJSON(text) {
     // Strip all markdown fences (```json ... ``` or ``` ... ```)
     const stripped = text.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim();
 
-    // Use a specific pattern: array of objects [ { … } ] rather than any [ … ]
-    // This avoids matching things like "[note: 4 columns]" that appear before the real array
-    const match = stripped.match(/\[\s*\{[\s\S]*\}\s*\]/);
+    // Try strict pattern first: array of objects [ { … } ]
+    // Avoids matching preamble text like "[note: 4 columns detected]"
+    let match = stripped.match(/\[\s*\{[\s\S]*\}\s*\]/);
+
+    // Fallback: any [...] in case the model returned an empty array or unusual spacing
+    if (!match) match = stripped.match(/\[[\s\S]*?\]/);
+
     if (!match) {
-        console.error('[worksheet] No JSON object-array found. Raw model output:', text.slice(0, 500));
-        throw new Error('The AI did not return a recognisable answer list. Try again.');
+        console.error('[worksheet] No array found. Raw model output:', text);
+        const preview = text.slice(0, 200).replace(/\n/g, ' ');
+        throw new Error(`The AI did not return a recognisable answer list. Try again.\n\nModel responded: "${preview}"`);
     }
 
     let j = match[0];
