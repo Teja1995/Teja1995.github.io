@@ -120,17 +120,32 @@ async function checkWorksheet() {
 
 async function analyzeWithGemini({ base64, mimeType }, apiKey) {
     const prompt =
-        `This is a math worksheet with a student's handwritten answers.
-For each visible math question on the worksheet:
-1. Extract the exact question text (e.g. "24 + 37 = ")
-2. Extract the student's written answer
-3. Calculate the correct answer yourself
-4. Determine if the student's answer is correct (for percentages allow up to 0.01 rounding difference)
+`This worksheet contains math problems arranged in columns (typically 4 columns side by side).
 
-Return ONLY a valid JSON array — no markdown fences, no explanation:
-[{"question":"...","studentAnswer":"...","correctAnswer":"...","isCorrect":true}]
+LAYOUT RULES — read carefully before extracting anything:
+- Each problem has this exact format printed on the page:  NUMBER  [operator]  NUMBER  =  ______
+- The blank line (underscores or a dash) after the = sign is where the student writes their answer.
+- Process column by column, left to right. Within each column, read top to bottom.
+- Each problem occupies exactly one row in its column. Do NOT borrow numbers from the row above or below.
 
-If you cannot clearly read a question or answer, set that field to "unreadable".`;
+HOW TO FIND THE STUDENT'S ANSWER:
+- Look ONLY at the space immediately after the = sign on the same line as that problem.
+- If there is handwriting in that space, that is the student's answer.
+- If the space is blank (no handwriting, just the underline), the student did not answer — set studentAnswer to "blank".
+- NEVER use a number printed as part of the next question as the answer to the current question.
+
+FOR EACH PROBLEM:
+1. Read the two printed numbers and the operator (e.g. 31 + 29).
+2. Look only at the blank/underscored space after = on that same line for a handwritten answer.
+3. Calculate the mathematically correct answer yourself.
+4. Compare the student's answer to your calculated answer.
+5. For percentages or decimals, allow up to 0.01 rounding difference.
+
+Return ONLY a valid JSON array — no markdown fences, no extra text:
+[{"question":"31 + 29","studentAnswer":"60","correctAnswer":"60","isCorrect":true}]
+
+If handwriting is unclear, set studentAnswer to "unreadable" and isCorrect to false.
+If the student left it blank, set studentAnswer to "blank" and isCorrect to false.`;
 
     const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
