@@ -133,7 +133,7 @@ Return ONLY a valid JSON array — no markdown fences, no explanation:
 If you cannot clearly read a question or answer, set that field to "unreadable".`;
 
     const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
         {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
