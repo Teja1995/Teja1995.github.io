@@ -93,29 +93,38 @@ function removeFile() {
 // ─── Worksheet prompt (shared across all models) ───────────────
 
 const WORKSHEET_PROMPT =
-`You are reading a student's completed math worksheet. Your only job is to find every printed problem and transcribe what the student wrote as their answer. Do not solve any problems yourself.
+`You are reading a student's completed math worksheet photo. Your job is to find every printed problem and transcribe what the student wrote as their answer. Do not compute or verify any answers yourself.
 
-Worksheet layout: Problems are arranged in columns (typically 4 columns per page, read left to right). Each problem is printed as:
-  NUMBER operator NUMBER = ______
-where the underlined blank is where the student writes their answer.
+STEP 1 — Correct for orientation.
+The photo may be taken at an angle or rotated. Before reading anything, mentally straighten the image so the text is upright and level.
 
-For each problem, output one JSON object with exactly these four fields:
-  "question"      — the printed expression, e.g. "47 + 83"
-  "studentAnswer" — what the student wrote in the blank after the = sign
-                    • Any marks, even faint pencil, count — transcribe them as written
-                    • Truly empty blank (nothing at all): use "blank"
-                    • Marks you cannot decipher: use "unreadable"
-  "correctAnswer" — always use "" (the app computes this itself)
-  "isCorrect"     — always use false (the app verifies this itself)
+STEP 2 — Identify the columns.
+The worksheet is divided into vertical columns — think of them like columns in a newspaper, running top to bottom. There are usually 4 such columns side by side. Identify where each column starts and ends horizontally.
 
-Rules:
-  • Never compute or supply an answer — only read what the student wrote
-  • Read only the space immediately after = on the same line; never borrow from adjacent rows
-  • Every problem visible on the page must appear in the output
-  • A full page typically has 20–30 problems across 4 columns — if you have fewer than 15, re-check the right side of the image
+STEP 3 — Read one complete column at a time, left to right.
+Pick the leftmost column. Read every problem in it from top to bottom. Finish the entire column before moving to the next one. Do NOT scan horizontally across the page.
 
-Return ONLY a JSON array — no explanation, no markdown, no code fences, nothing else:
-[{"question":"47 + 83","studentAnswer":"130","correctAnswer":"","isCorrect":false}]`;
+STEP 4 — Read each problem as one self-contained line.
+Every problem occupies exactly one horizontal line within its column:
+  NUMBER  operator  NUMBER  =  ______
+All parts — both numbers, the operator, and the answer blank — live on that single line.
+CRITICAL: Never take a number from one line and pair it with a number from a different line. Each line is one complete, independent problem.
+
+STEP 5 — Transcribe the student's answer.
+Look only at the blank space after the = sign on that line.
+  • Any writing, even faint pencil — transcribe it exactly as written.
+  • Completely empty blank — use "blank".
+  • Something written but unreadable — use "unreadable".
+
+For each problem output exactly this JSON shape:
+  {"question":"47 + 83","studentAnswer":"130","correctAnswer":"","isCorrect":false}
+
+Always set correctAnswer to "" and isCorrect to false — the app computes these itself.
+
+A full worksheet page has 20–30 problems across 4 columns. If your output has fewer than 15 items, you have missed columns — go back and check each column again.
+
+Return ONLY a JSON array with no explanation, no markdown, and no text outside the array:
+[{"question":"47 + 83","studentAnswer":"130","correctAnswer":"","isCorrect":false}, ...]`;
 
 // ─── Per-format API callers ────────────────────────────────────
 
