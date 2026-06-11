@@ -49,12 +49,14 @@ firebase-config.js  — Firebase project credentials + initialises firebase + db
 - Results displayed as a table with ✓ / ✗ per question and a correct/wrong summary
 - Shows which model was used at the bottom of the results
 
-**Worksheet prompt design:** Worksheets typically have 4 columns of problems in `num + num = ____` format. The prompt opens with a GOLDEN RULE and explicitly instructs the model to:
+**Worksheet prompt design:** Worksheets typically have 4 columns of problems in `num + num = ____` format. The prompt is structured as two explicit steps and opens with a GOLDEN RULE:
 - Act as an answer-**checker**, not an answer-**giver** — never compute and write an answer the student didn't write
 - GOLDEN RULE: if the answer space after `=` is empty, `studentAnswer` must be `"blank"` and `isCorrect` must be `false`, no exceptions
-- Read column by column, left to right, top to bottom within each column
+- **Step 1 — Scan the full image first:** before reading anything, look at the entire image left-to-right, count all columns (typically 4), and commit to processing every one. The prompt explicitly warns: "if you find yourself returning fewer than 15 results for a full page, you have missed columns — look again at the right side of the image." This was added because Llama 4 Scout would read only the first column and stop.
+- **Step 2 — Read each column:** left to right across columns, top to bottom within each column
 - Only look at the blank/underscored space immediately after `=` on the same line for the student's answer
 - Never borrow a number from the next question as the current answer
+- Every problem visible on the sheet must appear in the output array
 - If the entire sheet appears unanswered, every `studentAnswer` must be `"blank"` and every `isCorrect` must be `false`
 
 **Client-side blank/unreadable enforcement (`upload.js → displayWorksheetResults`):**
@@ -257,6 +259,7 @@ Apply in: Firebase Console → Realtime Database → Rules → Publish.
 | GOLDEN RULE in prompt + client-side enforcement | Models (both Gemini and Groq) were filling in computed answers for blank spaces and marking them correct; opening the prompt with "you are a checker not a giver" + client-side `isCorrect=false` override fixed it |
 | 5-pass JSON recovery | Groq and OpenRouter return trailing commas, single quotes, preamble text, or cut-off arrays; a single `JSON.parse` fails too often; five progressive recovery passes handle all observed failure modes |
 | Extraction regex requires array of objects | Plain `\[[\s\S]*\]` matched `[note: 4 columns]` preambles and poisoned the parse; `\[\s*\{…\}\s*\]` requires the array to contain objects so only the real answer array matches |
+| Two-step scan prompt for multi-column reading | Llama 4 Scout read only the first column and stopped; restructuring the prompt as "Step 1: scan full image and count columns" then "Step 2: read each column" with an explicit minimum-result warning fixed it |
 | AI Studio key required for Gemini (not Cloud Console) | Cloud Console keys have 0 free-tier quota for Gemini regardless of model |
 | models.js loaded before auth.js | auth.js iterates MODELS to restore keys; models.js must exist as a global first |
 | Operation selection saved to localStorage | Students often practice the same type each day; persisting the chip selection avoids re-selecting every visit |
