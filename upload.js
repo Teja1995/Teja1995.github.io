@@ -93,32 +93,38 @@ function removeFile() {
 // ─── Worksheet prompt (shared across all models) ───────────────
 
 const WORKSHEET_PROMPT =
-`This worksheet contains math problems arranged in columns (typically 4 columns side by side).
+`You are an answer-CHECKER, not an answer-GIVER. Your only job is to read what a student physically wrote on a worksheet, then verify whether it is correct. You must NEVER supply, invent, or compute an answer the student did not write.
 
-LAYOUT RULES — read carefully before extracting anything:
-- Each problem has this exact format printed on the page:  NUMBER  [operator]  NUMBER  =  ______
-- The blank line (underscores or a dash) after the = sign is where the student writes their answer.
-- Process column by column, left to right. Within each column, read top to bottom.
-- Each problem occupies exactly one row in its column. Do NOT borrow numbers from the row above or below.
+⚠ GOLDEN RULE: If the answer space after = is empty (no handwriting visible), you MUST set studentAnswer to "blank" and isCorrect to false. No exceptions.
 
-HOW TO FIND THE STUDENT'S ANSWER:
-- Look ONLY at the space immediately after the = sign on the same line as that problem.
-- If there is handwriting in that space, that is the student's answer.
-- If the space is blank (no handwriting, just the underline), the student did not answer — set studentAnswer to "blank".
-- NEVER use a number printed as part of the next question as the answer to the current question.
+THE WORKSHEET FORMAT:
+Problems are printed on the page in this format:   NUMBER [operator] NUMBER = ______
+The underscored/blank space after = is where the student handwrites their answer.
+Problems are arranged in columns (typically 4 columns). Read column by column, left to right, top to bottom within each column. Each problem is on exactly one row — do NOT borrow numbers from adjacent rows.
+
+HOW TO IDENTIFY THE STUDENT'S ANSWER:
+- Look ONLY at the space immediately after the = sign on that problem's line.
+- If you see handwriting there → that is studentAnswer.
+- If the space is empty, blank, or only has the printed underline → studentAnswer is "blank".
+- NEVER use a number from the next printed question as the current answer.
+- NEVER compute the correct answer and write it as if the student wrote it.
+
+HOW TO SET isCorrect:
+- isCorrect is true ONLY IF: (a) the student actually wrote something (not "blank" or "unreadable") AND (b) what they wrote equals the mathematically correct answer.
+- isCorrect is false if studentAnswer is "blank", "unreadable", or mathematically wrong.
+- For decimals/percentages allow up to 0.01 rounding difference.
 
 FOR EACH PROBLEM:
-1. Read the two printed numbers and the operator (e.g. 31 + 29).
-2. Look only at the blank/underscored space after = on that same line for a handwritten answer.
-3. Calculate the mathematically correct answer yourself.
-4. Compare the student's answer to your calculated answer.
-5. For percentages or decimals, allow up to 0.01 rounding difference.
+1. Read the printed question (e.g. 31 + 29).
+2. Look at the answer space after = — is there handwriting? If yes, transcribe it. If no, write "blank".
+3. Calculate the correct answer yourself (this goes in correctAnswer).
+4. Set isCorrect according to the rule above.
 
-Return ONLY a valid JSON array — no markdown fences, no extra text:
+Return ONLY a valid JSON array — no markdown, no code fences, no extra text:
 [{"question":"31 + 29","studentAnswer":"60","correctAnswer":"60","isCorrect":true}]
 
-If handwriting is unclear, set studentAnswer to "unreadable" and isCorrect to false.
-If the student left it blank, set studentAnswer to "blank" and isCorrect to false.`;
+If you cannot read the handwriting, set studentAnswer to "unreadable" and isCorrect to false.
+If the entire sheet appears unanswered, every studentAnswer must be "blank" and every isCorrect must be false.`;
 
 // ─── Per-format API callers ────────────────────────────────────
 
@@ -279,6 +285,13 @@ async function checkWorksheet() {
 function displayWorksheetResults(results, model) {
     const tbody = document.getElementById('results-tbody');
     tbody.innerHTML = '';
+
+    // Safety net: blank/unreadable answers can never be marked correct,
+    // regardless of what the model returned
+    results.forEach(r => {
+        const s = String(r.studentAnswer).toLowerCase();
+        if (s === 'blank' || s === 'unreadable') r.isCorrect = false;
+    });
 
     let correct = 0, wrong = 0;
     results.forEach((r, i) => {
