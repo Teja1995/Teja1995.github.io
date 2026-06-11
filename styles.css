@@ -767,6 +767,142 @@ h1 {
 .onboarding-icon   { font-size: 2rem; margin-bottom: 10px; }
 .onboarding-steps  { margin-bottom: 16px; }
 
+/* ─── Model grid (Settings tab) ───────────────────────────── */
+
+.model-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-top: 4px;
+}
+
+.model-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1.5px solid var(--border);
+    border-radius: 14px;
+    padding: 16px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s, transform 0.15s;
+    user-select: none;
+}
+.model-card:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(99, 102, 241, 0.4);
+    transform: translateY(-1px);
+}
+.model-card.selected {
+    border-color: var(--accent);
+    background: rgba(99, 102, 241, 0.08);
+    box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.model-card-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+.model-icon {
+    flex-shrink: 0;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.model-info { flex: 1; min-width: 0; }
+.model-name {
+    font-size: 0.9rem;
+    font-weight: 700;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.model-provider {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: 1px;
+}
+
+.model-tag {
+    flex-shrink: 0;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 20px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+.tag-recommended { background: rgba(99,102,241,0.18); color: var(--accent-light); }
+.tag-fast        { background: rgba(245,80,54,0.15);  color: #f97316; }
+.tag-free        { background: rgba(109,40,217,0.18); color: #a78bfa; }
+.tag-alt         { background: rgba(100,116,139,0.15); color: var(--text-muted); }
+
+.model-meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.model-stars {
+    font-size: 0.75rem;
+    color: #f59e0b;
+    letter-spacing: 1px;
+}
+.model-rpm {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+.model-key-ind {
+    font-size: 0.72rem;
+    font-weight: 600;
+    margin-left: auto;
+}
+.model-key-ind.has-key { color: var(--correct); }
+.model-key-ind.no-key  { color: var(--text-muted); }
+
+/* Key note box inside model key panel */
+.model-key-note {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    line-height: 1.5;
+}
+
+/* ─── Upload tab model badge ───────────────────────────────── */
+
+.upload-model-badge {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+}
+.upload-model-badge strong { color: var(--text); }
+
+.btn-link {
+    background: none;
+    border: none;
+    color: var(--accent-light);
+    font-size: inherit;
+    font-family: inherit;
+    cursor: pointer;
+    padding: 0;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.btn-link:hover { opacity: 0.8; }
+
+/* Results model attribution */
+.results-model-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+    margin-bottom: 16px;
+}
+
 /* ─── Responsive ───────────────────────────────────────────── */
 
 @media (max-width: 560px) {
@@ -778,4 +914,6 @@ h1 {
     .info-row { grid-template-columns: 1fr 1fr; }
     .button-row { flex-wrap: wrap; }
     .btn-primary { flex: 1 1 100%; }
+    .model-grid { grid-template-columns: 1fr; }
+    .model-card-header { flex-wrap: nowrap; }
 }

@@ -19,20 +19,30 @@ auth.onAuthStateChanged(async user => {
         const avatar = document.getElementById('user-avatar');
         if (user.photoURL) avatar.src = user.photoURL;
 
-        // Restore Gemini key from database into localStorage on every login
+        // Restore all model API keys from database into localStorage on every login
         try {
-            const snap = await db.ref('users/' + user.uid + '/geminiKey').once('value');
-            if (snap.val()) localStorage.setItem('geminiApiKey', snap.val());
-        } catch (e) { /* ignore — key will be prompted if missing */ }
+            const userSnap = await db.ref('users/' + user.uid).once('value');
+            const userData = userSnap.val() || {};
+            // Use the MODELS registry to restore each key by its dbKey
+            const seen = new Set();
+            for (const model of MODELS) {
+                if (!model.dbKey || seen.has(model.dbKey)) continue;
+                seen.add(model.dbKey);
+                if (userData[model.dbKey]) {
+                    localStorage.setItem(model.keyStorageKey, userData[model.dbKey]);
+                }
+            }
+        } catch (e) { /* ignore — keys will be prompted if missing */ }
 
         document.getElementById('view-signin').classList.add('hidden');
         document.getElementById('view-app').classList.remove('hidden');
         showTab('practice');
         loadPerformanceData();
 
-        // Show onboarding popup if still no key after DB restore
+        // Show onboarding popup if no key exists for any model
         setTimeout(() => {
-            if (!localStorage.getItem('geminiApiKey')) {
+            const hasAnyKey = MODELS.some(m => localStorage.getItem(m.keyStorageKey));
+            if (!hasAnyKey) {
                 document.getElementById('gemini-onboarding-modal').classList.remove('hidden');
             }
         }, 700);

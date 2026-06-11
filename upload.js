@@ -70,7 +70,6 @@ async function renderPDFToBase64(arrayBuffer) {
     canvas.height = viewport.height;
 
     await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-
     return canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
 }
 
@@ -91,35 +90,9 @@ function removeFile() {
     document.getElementById('check-btn').disabled = true;
 }
 
-// ─── Worksheet checking ────────────────────────────────────────
+// ─── Worksheet prompt (shared across all models) ───────────────
 
-async function checkWorksheet() {
-    const apiKey = localStorage.getItem('geminiApiKey');
-    if (!apiKey) {
-        alert('Please set your Gemini API key in the Settings tab first.');
-        showTab('settings');
-        return;
-    }
-
-    if (!selectedFileData) return;
-
-    document.getElementById('upload-loading').classList.remove('hidden');
-    document.getElementById('upload-results').classList.add('hidden');
-    document.getElementById('check-btn').disabled = true;
-
-    try {
-        const results = await analyzeWithGemini(selectedFileData, apiKey);
-        displayWorksheetResults(results);
-    } catch (err) {
-        alert('Error checking worksheet: ' + err.message);
-    } finally {
-        document.getElementById('upload-loading').classList.add('hidden');
-        document.getElementById('check-btn').disabled = false;
-    }
-}
-
-async function analyzeWithGemini({ base64, mimeType }, apiKey) {
-    const prompt =
+const WORKSHEET_PROMPT =
 `This worksheet contains math problems arranged in columns (typically 4 columns side by side).
 
 LAYOUT RULES — read carefully before extracting anything:
@@ -147,45 +120,167 @@ Return ONLY a valid JSON array — no markdown fences, no extra text:
 If handwriting is unclear, set studentAnswer to "unreadable" and isCorrect to false.
 If the student left it blank, set studentAnswer to "blank" and isCorrect to false.`;
 
-    const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
-        {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{
-                    parts: [
-                        { text: prompt },
-                        { inline_data: { mime_type: mimeType, data: base64 } }
-                    ]
-                }],
-                generationConfig: { temperature: 0.1 }
-            })
-        }
-    );
+// ─── Per-format API callers ────────────────────────────────────
 
+async function callGeminiAPI(model, base64, mimeType, apiKey) {
+    const response = await fetch(`${model.endpoint}?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{
+                parts: [
+                    { text: WORKSHEET_PROMPT },
+                    { inline_data: { mime_type: mimeType, data: base64 } }
+                ]
+            }],
+            generationConfig: { temperature: 0.1 }
+        })
+    });
     if (!response.ok) {
         const err = await response.json().catch(() => ({}));
         throw new Error(err.error?.message || `HTTP ${response.status}`);
     }
-
     const data = await response.json();
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    return parseAIJSON(text);
+}
 
+async function callOpenAICompatAPI(model, base64, mimeType, apiKey) {
+    const headers = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+    };
+    // OpenRouter requires these headers to comply with their usage policy
+    if (model.endpoint.includes('openrouter')) {
+        headers['HTTP-Referer'] = 'https://teja1995.github.io';
+        headers['X-Title'] = 'Math Speed Trainer';
+    }
+    const response = await fetch(model.endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+            model: model.modelId,
+            messages: [{
+                role: 'user',
+                content: [
+                    { type: 'text', text: WORKSHEET_PROMPT },
+                    { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } }
+                ]
+            }],
+            temperature: 0.1
+        })
+    });
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error?.message || `HTTP ${response.status}`);
+    }
+    const data = await response.json();
+    const text = data.choices?.[0]?.message?.content || '';
+    return parseAIJSON(text);
+}
+
+function parseAIJSON(text) {
     const match = text.match(/\[[\s\S]*\]/);
     if (!match) throw new Error('Could not parse AI response. Try again.');
-
     return JSON.parse(match[0]);
+}
+
+async function callModel(model, { base64, mimeType }, apiKey) {
+    if (model.apiFormat === 'gemini') {
+        return callGeminiAPI(model, base64, mimeType, apiKey);
+    } else {
+        return callOpenAICompatAPI(model, base64, mimeType, apiKey);
+    }
+}
+
+// ─── Retry + failover orchestration ───────────────────────────
+
+function isOverloadError(err) {
+    const m = err.message.toLowerCase();
+    return m.includes('503') || m.includes('overload') || m.includes('high demand') ||
+           m.includes('unavailable') || m.includes('retry') ||
+           m.includes('rate limit') || m.includes('429') || m.includes('too many');
+}
+
+const RETRY_DELAYS = [5000, 15000, 30000];
+
+async function tryModelWithRetries(model, fileData, apiKey) {
+    let lastErr;
+    for (let i = 0; i < 3; i++) {
+        try {
+            return await callModel(model, fileData, apiKey);
+        } catch (err) {
+            lastErr = err;
+            if (isOverloadError(err) && i < 2) {
+                const waitSec = RETRY_DELAYS[i] / 1000;
+                setLoadingMessage(`${model.name} is busy — retrying in ${waitSec}s… (attempt ${i + 1}/3)`);
+                await new Promise(r => setTimeout(r, RETRY_DELAYS[i]));
+                setLoadingMessage(`Retrying with ${model.name}…`);
+            } else {
+                throw err;
+            }
+        }
+    }
+    throw lastErr;
+}
+
+function setLoadingMessage(msg) {
+    const p = document.querySelector('#upload-loading p');
+    if (p) p.textContent = msg;
+}
+
+async function checkWorksheet() {
+    if (!selectedFileData) return;
+
+    const selectedId = localStorage.getItem('selectedModel') || 'gemini-2.5-flash';
+    const orderedModels = getFailoverOrder(selectedId);
+    const available = orderedModels.filter(m => localStorage.getItem(m.keyStorageKey));
+
+    if (available.length === 0) {
+        alert('No API key found. Please go to Settings and add a key for at least one AI model.');
+        showTab('settings');
+        return;
+    }
+
+    document.getElementById('upload-loading').classList.remove('hidden');
+    document.getElementById('upload-results').classList.add('hidden');
+    document.getElementById('check-btn').disabled = true;
+    setLoadingMessage(`Analysing with ${available[0].name}…`);
+
+    let lastError;
+    for (let mi = 0; mi < available.length; mi++) {
+        const model = available[mi];
+        const apiKey = localStorage.getItem(model.keyStorageKey);
+        try {
+            const results = await tryModelWithRetries(model, selectedFileData, apiKey);
+            displayWorksheetResults(results, model);
+            document.getElementById('upload-loading').classList.add('hidden');
+            document.getElementById('check-btn').disabled = false;
+            return;
+        } catch (err) {
+            lastError = err;
+            if (isOverloadError(err) && mi < available.length - 1) {
+                const next = available[mi + 1];
+                setLoadingMessage(`${model.name} is unavailable. Switching to ${next.name}…`);
+                await new Promise(r => setTimeout(r, 2000));
+            } else {
+                break;
+            }
+        }
+    }
+
+    document.getElementById('upload-loading').classList.add('hidden');
+    document.getElementById('check-btn').disabled = false;
+    alert('Could not check worksheet: ' + (lastError?.message || 'Unknown error'));
 }
 
 // ─── Results rendering ─────────────────────────────────────────
 
-function displayWorksheetResults(results) {
+function displayWorksheetResults(results, model) {
     const tbody = document.getElementById('results-tbody');
     tbody.innerHTML = '';
 
     let correct = 0, wrong = 0;
-
     results.forEach((r, i) => {
         if (r.isCorrect) correct++; else wrong++;
         const tr = document.createElement('tr');
@@ -201,6 +296,10 @@ function displayWorksheetResults(results) {
 
     document.getElementById('results-correct-count').textContent = `✓ ${correct} correct`;
     document.getElementById('results-wrong-count').textContent = `✗ ${wrong} wrong`;
+
+    const modelLabel = document.getElementById('results-model-label');
+    if (modelLabel && model) modelLabel.textContent = `Checked with ${model.name} (${model.provider})`;
+
     document.getElementById('upload-results').classList.remove('hidden');
 }
 

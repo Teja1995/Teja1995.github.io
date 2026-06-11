@@ -14,55 +14,152 @@ function showTab(tabName) {
     document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
 
     if (tabName === 'performance') loadPerformanceData();
-    if (tabName === 'settings') refreshSettingsTab();
-}
-
-function refreshSettingsTab() {
-    const saved = localStorage.getItem('geminiApiKey');
-    if (saved) document.getElementById('gemini-key').value = saved;
-
-    const badge = document.getElementById('key-current-badge');
-    if (!badge) return;
-    if (saved) {
-        badge.textContent = '✓ API key is saved';
-        badge.className = 'key-badge saved';
-    } else {
-        badge.textContent = '⚠ No key saved — worksheet checking is disabled';
-        badge.className = 'key-badge missing';
-    }
+    if (tabName === 'settings')    renderSettingsTab();
+    if (tabName === 'upload')      refreshUploadModelBadge();
 }
 
 function closeModal(id) {
     document.getElementById(id).classList.add('hidden');
 }
 
-// ─── Settings ──────────────────────────────────────────────────
+// ─── Settings — model selection ────────────────────────────────
 
-function persistGeminiKey(key) {
-    localStorage.setItem('geminiApiKey', key);
-    // Also save to Firebase so it survives browser clears and works across devices
-    if (currentUser) {
-        db.ref('users/' + currentUser.uid + '/geminiKey').set(key)
-            .catch(e => console.error('Could not save key to database:', e));
-    }
+function renderSettingsTab() {
+    renderModelGrid();
+    const selectedId = localStorage.getItem('selectedModel') || 'gemini-2.5-flash';
+    renderModelKeyPanel(selectedId);
 }
 
-function saveGeminiKey() {
-    const key = document.getElementById('gemini-key').value.trim();
-    const status = document.getElementById('key-status');
+function renderModelGrid() {
+    const grid = document.getElementById('model-grid');
+    if (!grid) return;
+    const selectedId = localStorage.getItem('selectedModel') || 'gemini-2.5-flash';
+
+    grid.innerHTML = MODELS.map(model => {
+        const hasKey  = !!localStorage.getItem(model.keyStorageKey);
+        const isSelected = model.id === selectedId;
+        const stars   = '★'.repeat(model.accuracy) + '☆'.repeat(5 - model.accuracy);
+
+        return `
+        <div class="model-card ${isSelected ? 'selected' : ''}"
+             onclick="selectModel('${model.id}')" role="button" tabindex="0"
+             aria-pressed="${isSelected}">
+            <div class="model-card-header">
+                <div class="model-icon">${model.icon}</div>
+                <div class="model-info">
+                    <div class="model-name">${model.name}</div>
+                    <div class="model-provider">${model.provider}</div>
+                </div>
+                <span class="model-tag ${model.tagClass}">${model.tag}</span>
+            </div>
+            <div class="model-meta">
+                <span class="model-stars" aria-label="${model.accuracy} out of 5 stars">${stars}</span>
+                <span class="model-rpm">${model.rpmLabel}</span>
+                <span class="model-key-ind ${hasKey ? 'has-key' : 'no-key'}">
+                    ${hasKey ? '✓ Key saved' : '○ No key'}
+                </span>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function selectModel(id) {
+    localStorage.setItem('selectedModel', id);
+    renderModelGrid();
+    renderModelKeyPanel(id);
+    refreshUploadModelBadge();
+}
+
+function renderModelKeyPanel(modelId) {
+    const panel = document.getElementById('model-key-panel');
+    if (!panel) return;
+    const model = MODELS.find(m => m.id === modelId);
+    if (!model) { panel.classList.add('hidden'); return; }
+
+    const savedKey = localStorage.getItem(model.keyStorageKey) || '';
+    const hasKey   = !!savedKey;
+
+    // Build guide steps HTML
+    const stepsHtml = model.keySteps.map((step, i) => {
+        const content = step.link
+            ? `${step.text}<a href="${step.link.url}" target="_blank" rel="noopener noreferrer">${step.link.label}</a>`
+            : step.text;
+        return `<li><span class="step-num">${i + 1}</span><div>${content}</div></li>`;
+    }).join('');
+
+    panel.innerHTML = `
+        <h3 class="section-title">API Key — ${model.name}</h3>
+        <div class="model-key-note">${model.keyNote}</div>
+        <div class="guide-box" style="margin-top:16px">
+            <p class="guide-title">How to get a free key</p>
+            <ol class="guide-steps">${stepsHtml}</ol>
+        </div>
+        <div class="settings-group" style="margin-top:4px">
+            <label class="settings-label" for="model-key-input">Your API Key</label>
+            <div class="api-key-row">
+                <input type="password" id="model-key-input" class="settings-input"
+                       placeholder="${model.keyPlaceholder}"
+                       value="${hasKey ? savedKey : ''}">
+                <button class="btn btn-primary" onclick="saveSelectedModelKey('${model.id}')">Save</button>
+            </div>
+            <p id="model-key-status" class="key-status hidden"></p>
+        </div>`;
+
+    panel.classList.remove('hidden');
+}
+
+function saveSelectedModelKey(modelId) {
+    const model = MODELS.find(m => m.id === modelId);
+    if (!model) return;
+
+    const input  = document.getElementById('model-key-input');
+    const status = document.getElementById('model-key-status');
+    const key    = input.value.trim();
 
     if (!key || key.length < 10) {
         status.textContent = 'Please paste a valid API key.';
-        status.className = 'key-status error';
+        status.className   = 'key-status error';
         status.classList.remove('hidden');
         return;
     }
 
-    persistGeminiKey(key);
-    status.textContent = '✓ API key saved successfully.';
-    status.className = 'key-status success';
+    // Save to localStorage
+    localStorage.setItem(model.keyStorageKey, key);
+
+    // Save to Firebase (all models sharing the same dbKey share one Firebase field)
+    if (currentUser) {
+        db.ref('users/' + currentUser.uid + '/' + model.dbKey).set(key)
+          .catch(e => console.error('Could not save key to database:', e));
+    }
+
+    status.textContent = `✓ ${model.name} key saved.`;
+    status.className   = 'key-status success';
     status.classList.remove('hidden');
-    refreshSettingsTab();
+    renderModelGrid(); // refresh key indicators on the cards
+}
+
+// ─── Upload tab — active model badge ──────────────────────────
+
+function refreshUploadModelBadge() {
+    const badge = document.getElementById('upload-model-badge');
+    if (!badge) return;
+    const selectedId = localStorage.getItem('selectedModel') || 'gemini-2.5-flash';
+    const model = MODELS.find(m => m.id === selectedId);
+    if (!model) return;
+    const hasKey = !!localStorage.getItem(model.keyStorageKey);
+    badge.innerHTML = hasKey
+        ? `Using <strong>${model.name}</strong> · <button class="btn-link" onclick="showTab('settings')">Change model</button>`
+        : `<span style="color:var(--wrong)">No key for ${model.name}</span> · <button class="btn-link" onclick="showTab('settings')">Add a key</button>`;
+}
+
+// ─── Gemini onboarding modal (shown on first login) ───────────
+
+function persistGeminiKey(key) {
+    localStorage.setItem('geminiApiKey', key);
+    if (currentUser) {
+        db.ref('users/' + currentUser.uid + '/geminiKey').set(key)
+          .catch(e => console.error('Could not save key to database:', e));
+    }
 }
 
 function saveGeminiKeyFromOnboarding() {
@@ -73,9 +170,6 @@ function saveGeminiKeyFromOnboarding() {
     }
     persistGeminiKey(key);
     closeModal('gemini-onboarding-modal');
-    const settingsInput = document.getElementById('gemini-key');
-    if (settingsInput) settingsInput.value = key;
-    refreshSettingsTab();
 }
 
 function skipGeminiOnboarding() {
@@ -98,15 +192,13 @@ function initializeQuote() {
         "It's going to be hard, but hard does not mean impossible",
         "The key to success is to focus on goals, not obstacles",
     ];
-
     const quote = quotes[Math.floor(Math.random() * quotes.length)];
-    const card = document.getElementById('correct-answer-container');
+    const card  = document.getElementById('correct-answer-container');
     if (card) {
         card.textContent = `"${quote}"`;
-        card.className = 'card feedback-card is-neutral';
+        card.className   = 'card feedback-card is-neutral';
     }
 }
-
 window.addEventListener('load', initializeQuote);
 
 function startPractice() {
@@ -114,15 +206,12 @@ function startPractice() {
         if (!confirm("Starting a new session will reset your progress. Continue?")) return;
     }
 
-    correctCount = 0;
+    correctCount   = 0;
     incorrectCount = 0;
     updateResult();
 
     const inputVal = parseInt(document.getElementById('timeInput').value);
-    if (!inputVal || inputVal <= 0) {
-        alert("Please enter a valid duration.");
-        return;
-    }
+    if (!inputVal || inputVal <= 0) { alert("Please enter a valid duration."); return; }
 
     sessionDurationMin = inputVal;
     time = inputVal * 60;
@@ -140,13 +229,9 @@ function generateQuestion() {
     container.innerHTML = '';
 
     const roll = Math.random();
-    if (roll < 0.33) {
-        generateArithmeticQuestion(container);
-    } else if (roll < 0.67) {
-        generateMultiplicationQuestion(container);
-    } else {
-        generatePercentageQuestion(container);
-    }
+    if      (roll < 0.33) generateArithmeticQuestion(container);
+    else if (roll < 0.67) generateMultiplicationQuestion(container);
+    else                  generatePercentageQuestion(container);
 }
 
 function generateMultiplicationQuestion(container) {
@@ -166,7 +251,7 @@ function generateArithmeticQuestion(container) {
     } while (num1 === num2);
 
     const ops = ['+', '-', '×'];
-    const op = ops[Math.floor(Math.random() * ops.length)];
+    const op  = ops[Math.floor(Math.random() * ops.length)];
     let questionText, answer;
 
     switch (op) {
@@ -178,7 +263,6 @@ function generateArithmeticQuestion(container) {
             break;
         case '×': questionText = `${num1} × ${num2} = ?`; answer = num1 * num2; break;
     }
-
     displayQuestion(container, questionText, answer);
 }
 
@@ -186,7 +270,7 @@ function generatePercentageQuestion(container) {
     let numerator, denominator;
     do {
         denominator = Math.floor(Math.random() * 15) + 2;
-        numerator = Math.floor(Math.random() * (denominator * 2 - 1)) + 1;
+        numerator   = Math.floor(Math.random() * (denominator * 2 - 1)) + 1;
     } while (numerator === denominator || numerator > denominator * 2);
 
     const answer = ((numerator / denominator) * 100).toFixed(2);
@@ -194,12 +278,12 @@ function generatePercentageQuestion(container) {
 }
 
 function displayQuestion(container, questionText, correctAnswer) {
-    const questionEl = document.createElement('p');
+    const questionEl  = document.createElement('p');
     questionEl.textContent = questionText;
 
     const answerInput = document.createElement('input');
-    answerInput.type = 'text';
-    answerInput.className = 'answer-input';
+    answerInput.type        = 'text';
+    answerInput.className   = 'answer-input';
     answerInput.placeholder = 'Type your answer…';
 
     container.appendChild(questionEl);
@@ -244,11 +328,11 @@ function displayFeedback(isCorrect, correctAnswer) {
 
     if (isCorrect) {
         card.textContent = '✓  Correct!';
-        card.className = 'card feedback-card is-correct';
+        card.className   = 'card feedback-card is-correct';
         bumpCount('correct-count');
     } else {
         card.textContent = `✗  The answer is ${correctAnswer}`;
-        card.className = 'card feedback-card is-wrong';
+        card.className   = 'card feedback-card is-wrong';
         bumpCount('incorrect-count');
     }
 }
@@ -263,11 +347,7 @@ function bumpCount(id) {
 
 function countdown() {
     if (!timerPaused) time--;
-
-    if (time <= 0) {
-        endPractice();
-        return;
-    }
+    if (time <= 0) { endPractice(); return; }
 
     const minutes = Math.floor(time / 60);
     const seconds = time % 60;
@@ -277,11 +357,11 @@ function countdown() {
 }
 
 function updateResult() {
-    document.getElementById('correct-count').textContent = correctCount;
+    document.getElementById('correct-count').textContent   = correctCount;
     document.getElementById('incorrect-count').textContent = incorrectCount;
 }
 
-function pausePractice() { timerPaused = true; }
+function pausePractice()  { timerPaused = true; }
 
 function resumePractice() {
     timerPaused = false;
@@ -296,18 +376,18 @@ async function endPractice() {
     document.getElementById('timer').textContent = '0:00';
 
     const totalQ = correctCount + incorrectCount;
-    const pct = totalQ > 0 ? Math.round((correctCount / totalQ) * 100) : 0;
-    const card = document.getElementById('correct-answer-container');
-    card.className = 'card feedback-card is-done';
+    const pct    = totalQ > 0 ? Math.round((correctCount / totalQ) * 100) : 0;
+    const card   = document.getElementById('correct-answer-container');
+    card.className   = 'card feedback-card is-done';
     card.textContent = `Session complete! ${correctCount}/${totalQ} correct (${pct}%)`;
 
     if (currentUser && sessionDurationMin > 0 && totalQ > 0) {
         const qPerMin = parseFloat((totalQ / sessionDurationMin).toFixed(2));
         await saveSession({
-            date: new Date().toISOString(),
+            date:        new Date().toISOString(),
             durationMin: sessionDurationMin,
-            correct: correctCount,
-            incorrect: incorrectCount,
+            correct:     correctCount,
+            incorrect:   incorrectCount,
             totalQ,
             qPerMin
         });
