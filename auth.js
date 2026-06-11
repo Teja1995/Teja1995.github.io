@@ -22,6 +22,12 @@ auth.onAuthStateChanged(user => {
         document.getElementById('view-app').classList.remove('hidden');
         showTab('practice');
         loadPerformanceData();
+        // Show onboarding popup if no Gemini key saved yet
+        setTimeout(() => {
+            if (!localStorage.getItem('geminiApiKey')) {
+                document.getElementById('gemini-onboarding-modal').classList.remove('hidden');
+            }
+        }, 700);
     } else {
         document.getElementById('view-signin').classList.remove('hidden');
         document.getElementById('view-app').classList.add('hidden');

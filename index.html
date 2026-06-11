@@ -225,21 +225,42 @@
         <div id="tab-settings" class="tab-content hidden">
             <div class="main-container">
                 <div class="card">
-                    <h2 class="section-title">Settings</h2>
+                    <h2 class="section-title">Gemini API Key</h2>
+                    <p class="section-desc">
+                        Required for the "Check Worksheet" feature. Your key is stored only in this browser and never sent to any server other than Google's.
+                    </p>
+
+                    <div id="key-current-badge" class="key-badge missing">
+                        ⚠ No key saved — worksheet checking is disabled
+                    </div>
+
+                    <div class="guide-box">
+                        <p class="guide-title">How to get a free key (takes 1 minute)</p>
+                        <ol class="guide-steps">
+                            <li>
+                                <span class="step-num">1</span>
+                                <div>Go to <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">aistudio.google.com/app/apikey</a></div>
+                            </li>
+                            <li>
+                                <span class="step-num">2</span>
+                                <div>Sign in with your Google account</div>
+                            </li>
+                            <li>
+                                <span class="step-num">3</span>
+                                <div>Click <strong>"Create API key"</strong> and copy it</div>
+                            </li>
+                            <li>
+                                <span class="step-num">4</span>
+                                <div>Paste it below and click <strong>Save</strong></div>
+                            </li>
+                        </ol>
+                    </div>
 
                     <div class="settings-group">
-                        <label class="settings-label" for="gemini-key">Gemini API Key</label>
-                        <p class="settings-hint">
-                            Required for the "Check Worksheet" feature.
-                            Get a free key from
-                            <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer">
-                                aistudio.google.com
-                            </a>.
-                            Keys start with <code>AIza</code>.
-                        </p>
+                        <label class="settings-label" for="gemini-key">Your API Key</label>
                         <div class="api-key-row">
                             <input type="password" id="gemini-key"
-                                   class="settings-input" placeholder="AIza…">
+                                   class="settings-input" placeholder="Paste your key here">
                             <button class="btn btn-primary" onclick="saveGeminiKey()">Save</button>
                         </div>
                         <p id="key-status" class="key-status hidden"></p>
@@ -253,6 +274,46 @@
     <!-- ═══════════════════════════════════════
          MODALS
     ═══════════════════════════════════════ -->
+
+    <!-- Gemini API key onboarding (shown on first login) -->
+    <div id="gemini-onboarding-modal" class="modal-overlay hidden">
+        <div class="modal card">
+            <div class="onboarding-icon">🔑</div>
+            <h3 class="modal-title">Set up Worksheet Checking</h3>
+            <p class="modal-desc">
+                To check your worksheet answers, this app uses Google's free Gemini AI.
+                You just need to grab a free API key — it takes about a minute.
+            </p>
+
+            <ol class="guide-steps onboarding-steps">
+                <li>
+                    <span class="step-num">1</span>
+                    <div>Open <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer">aistudio.google.com/app/apikey</a></div>
+                </li>
+                <li>
+                    <span class="step-num">2</span>
+                    <div>Sign in and click <strong>"Create API key"</strong></div>
+                </li>
+                <li>
+                    <span class="step-num">3</span>
+                    <div>Copy the key and paste it below</div>
+                </li>
+            </ol>
+
+            <div class="modal-field">
+                <input type="password" id="onboarding-key"
+                       class="settings-input" placeholder="Paste your API key here">
+                <p id="onboarding-error" class="key-status error hidden" style="margin-top:6px">
+                    Please paste a valid API key.
+                </p>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="skipGeminiOnboarding()">Skip for now</button>
+                <button class="btn btn-primary" onclick="saveGeminiKeyFromOnboarding()">Save &amp; Continue</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Add session manually -->
     <div id="add-session-modal" class="modal-overlay hidden">

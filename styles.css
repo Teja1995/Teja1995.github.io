@@ -703,6 +703,70 @@ h1 {
     80%       { transform: translateX(4px); }
 }
 
+/* ─── Key status badge (Settings tab) ─────────────────────── */
+
+.key-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 6px 12px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+.key-badge.saved   { background: rgba(16,185,129,0.12); color: var(--correct); border: 1px solid rgba(16,185,129,0.25); }
+.key-badge.missing { background: rgba(244,63,94,0.10);  color: var(--wrong);   border: 1px solid rgba(244,63,94,0.25); }
+
+/* ─── Guide box (Settings + onboarding modal) ──────────────── */
+
+.guide-box {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    margin-bottom: 20px;
+}
+.guide-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-muted);
+    margin-bottom: 14px;
+}
+.guide-steps {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+.guide-steps li {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+.step-num {
+    flex-shrink: 0;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(99,102,241,0.2);
+    color: var(--accent-light);
+    font-size: 0.72rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: 1px;
+}
+.guide-steps a { color: var(--accent-light); text-decoration: none; }
+.guide-steps a:hover { text-decoration: underline; }
+
+.onboarding-icon   { font-size: 2rem; margin-bottom: 10px; }
+.onboarding-steps  { margin-bottom: 16px; }
+
 /* ─── Responsive ───────────────────────────────────────────── */
 
 @media (max-width: 560px) {

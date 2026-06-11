@@ -14,9 +14,21 @@ function showTab(tabName) {
     document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
 
     if (tabName === 'performance') loadPerformanceData();
-    if (tabName === 'settings') {
-        const saved = localStorage.getItem('geminiApiKey');
-        if (saved) document.getElementById('gemini-key').value = saved;
+    if (tabName === 'settings') refreshSettingsTab();
+}
+
+function refreshSettingsTab() {
+    const saved = localStorage.getItem('geminiApiKey');
+    if (saved) document.getElementById('gemini-key').value = saved;
+
+    const badge = document.getElementById('key-current-badge');
+    if (!badge) return;
+    if (saved) {
+        badge.textContent = '✓ API key is saved';
+        badge.className = 'key-badge saved';
+    } else {
+        badge.textContent = '⚠ No key saved — worksheet checking is disabled';
+        badge.className = 'key-badge missing';
     }
 }
 
@@ -30,17 +42,36 @@ function saveGeminiKey() {
     const key = document.getElementById('gemini-key').value.trim();
     const status = document.getElementById('key-status');
 
-    if (!key || !key.startsWith('AIza')) {
-        status.textContent = 'Invalid key — Gemini keys start with "AIza".';
+    if (!key || key.length < 10) {
+        status.textContent = 'Please paste a valid API key.';
         status.className = 'key-status error';
         status.classList.remove('hidden');
         return;
     }
 
     localStorage.setItem('geminiApiKey', key);
-    status.textContent = 'API key saved successfully.';
+    status.textContent = '✓ API key saved successfully.';
     status.className = 'key-status success';
     status.classList.remove('hidden');
+    refreshSettingsTab();
+}
+
+function saveGeminiKeyFromOnboarding() {
+    const key = document.getElementById('onboarding-key').value.trim();
+    if (!key || key.length < 10) {
+        document.getElementById('onboarding-error').classList.remove('hidden');
+        return;
+    }
+    localStorage.setItem('geminiApiKey', key);
+    closeModal('gemini-onboarding-modal');
+    // Sync to settings input in case user navigates there
+    const settingsInput = document.getElementById('gemini-key');
+    if (settingsInput) settingsInput.value = key;
+    refreshSettingsTab();
+}
+
+function skipGeminiOnboarding() {
+    closeModal('gemini-onboarding-modal');
 }
 
 // ─── Practice ──────────────────────────────────────────────────

@@ -111,9 +111,12 @@ When moving to a custom domain:
 5. Register a web app → copy the config object into `firebase-config.js`
 
 ### Gemini API Key
-- Get a free key from aistudio.google.com
-- Users paste the key once into the Settings panel — stored in `localStorage`
-- Restrict the key in Google Cloud Console to only allow `generativelanguage.googleapis.com`
+- Get a free key from aistudio.google.com/app/apikey
+- On first login, a popup prompts the user to add their key (with step-by-step instructions)
+- The popup only appears if no key is stored; once saved it never reappears
+- Users can also add/update the key any time in the Settings tab
+- Key is stored in `localStorage` — never sent to any server other than Google's Gemini API
+- No format validation (prefix check removed) — wrong keys fail gracefully at the API call
 
 ### Firestore Rules (production)
 ```
