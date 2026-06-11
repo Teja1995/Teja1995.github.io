@@ -4,31 +4,59 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Math Speed Trainer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+
     <div class="main-container">
-        <div class="container">
+        <header class="hero">
+            <div class="logo-icon">∑</div>
             <h1>Math Speed Trainer</h1>
-            <div class="input-container">
-                <label for="timeInput">Enter Time (minutes):</label>
-                <input type="number" id="timeInput" min="1" placeholder="Enter time in minutes">
+            <p class="tagline">Sharpen your mental math</p>
+        </header>
+
+        <div class="card setup-card">
+            <label for="timeInput">Session duration</label>
+            <div class="time-input-row">
+                <input type="number" id="timeInput" min="1" placeholder="5">
+                <span class="unit">minutes</span>
             </div>
-            <div class="button-container">
-                <button onclick="startPractice()">Start Practice</button>
-                <button onclick="pausePractice()">Pause</button>
-                <button onclick="resumePractice()">Resume</button>
+            <div class="button-row">
+                <button class="btn btn-primary" onclick="startPractice()">▶ Start</button>
+                <button class="btn btn-ghost" onclick="pausePractice()">⏸ Pause</button>
+                <button class="btn btn-ghost" onclick="resumePractice()">▶ Resume</button>
             </div>
         </div>
-        <div id="question-container"></div>
-        <div id="result-container">
-            <p id="result"></p> <!-- This is where the result message will be displayed -->
+
+        <div class="info-row">
+            <div class="card score-card">
+                <div class="score correct">
+                    <span class="score-num" id="correct-count">0</span>
+                    <span class="score-label">Correct</span>
+                </div>
+                <div class="score-sep"></div>
+                <div class="score wrong">
+                    <span class="score-num" id="incorrect-count">0</span>
+                    <span class="score-label">Wrong</span>
+                </div>
+            </div>
+            <div class="card timer-card">
+                <div id="timer">--:--</div>
+                <span class="timer-label">remaining</span>
+            </div>
         </div>
-        <div id="correct-answer-container" class="correct-answer-container"></div> <!-- Container for displaying correct answer -->
-        <div id="timer-container">
-            <div id="timer">Time Remaining: --:--</div>
-        </div>
+
+        <div id="question-container" class="card question-card"></div>
+        <div id="result-container"></div>
+        <div id="correct-answer-container" class="card feedback-card"></div>
     </div>
+
     <script src="script.js"></script>
 </body>
 </html>
