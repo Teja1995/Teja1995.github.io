@@ -93,22 +93,29 @@ function removeFile() {
 // ─── Worksheet prompt (shared across all models) ───────────────
 
 const WORKSHEET_PROMPT =
-`You are an answer-CHECKER, not an answer-GIVER. Read what the student physically wrote and verify it. Never supply, invent, or compute an answer the student did not write.
+`You are reading a student's completed math worksheet. Your only job is to find every printed problem and transcribe what the student wrote as their answer. Do not solve any problems yourself.
 
-GOLDEN RULE: If the answer space after = is empty (no handwriting), you must set studentAnswer to "blank" and isCorrect to false, with no exceptions.
+Worksheet layout: Problems are arranged in columns (typically 4 columns per page, read left to right). Each problem is printed as:
+  NUMBER operator NUMBER = ______
+where the underlined blank is where the student writes their answer.
 
-SCAN THE WHOLE IMAGE FIRST: Before reading any answers, look at the entire image from the left edge to the right edge. Count how many vertical columns of problems exist — a standard worksheet has 4 columns. You must process every column. A full page typically has 20–30 problems. If your output contains fewer than 15 items for a full page you have missed columns — go back and check the right side of the image.
+For each problem, output one JSON object with exactly these four fields:
+  "question"      — the printed expression, e.g. "47 + 83"
+  "studentAnswer" — what the student wrote in the blank after the = sign
+                    • Any marks, even faint pencil, count — transcribe them as written
+                    • Truly empty blank (nothing at all): use "blank"
+                    • Marks you cannot decipher: use "unreadable"
+  "correctAnswer" — always use "" (the app computes this itself)
+  "isCorrect"     — always use false (the app verifies this itself)
 
-WORKSHEET FORMAT: Each problem is printed as NUMBER [operator] NUMBER = ______ where the blank underlined space is where the student writes their answer. Process left to right across columns, then top to bottom within each column. Each problem occupies exactly one row — do not borrow numbers from the row above or below.
+Rules:
+  • Never compute or supply an answer — only read what the student wrote
+  • Read only the space immediately after = on the same line; never borrow from adjacent rows
+  • Every problem visible on the page must appear in the output
+  • A full page typically has 20–30 problems across 4 columns — if you have fewer than 15, re-check the right side of the image
 
-STUDENT ANSWER: Look only at the space immediately after = on that problem's line. If there is handwriting — even faint pencil marks — transcribe it exactly. Only write "blank" if the space is truly empty with no marks at all. Never use a number from the next printed question as the current answer.
-
-isCorrect is true only when: (a) studentAnswer is not "blank" or "unreadable", and (b) it equals the mathematically correct answer. Allow 0.01 difference for decimals and percentages.
-
-Return ONLY a valid JSON array with no markdown, no code fences, and no explanation before or after it:
-[{"question":"31 + 29","studentAnswer":"60","correctAnswer":"60","isCorrect":true}]
-
-Every problem on the page must be in the array. Unreadable handwriting → studentAnswer "unreadable", isCorrect false.`;
+Return ONLY a JSON array — no explanation, no markdown, no code fences, nothing else:
+[{"question":"47 + 83","studentAnswer":"130","correctAnswer":"","isCorrect":false}]`;
 
 // ─── Per-format API callers ────────────────────────────────────
 
@@ -325,22 +332,25 @@ async function checkWorksheet() {
 
     const selectedId = localStorage.getItem('selectedModel') || 'gemini-2.5-flash';
     const orderedModels = getFailoverOrder(selectedId);
-    const available = orderedModels.filter(m => localStorage.getItem(m.keyStorageKey));
+    const allAvailable = orderedModels.filter(m => localStorage.getItem(m.keyStorageKey));
 
-    if (available.length === 0) {
+    if (allAvailable.length === 0) {
         alert('No API key found. Please go to Settings and add a key for at least one AI model.');
         showTab('settings');
         return;
     }
 
+    const autoRetry = document.getElementById('auto-retry-checkbox')?.checked ?? true;
+    const queue = autoRetry ? allAvailable : allAvailable.slice(0, 1);
+
     document.getElementById('upload-loading').classList.remove('hidden');
     document.getElementById('upload-results').classList.add('hidden');
     document.getElementById('check-btn').disabled = true;
-    setLoadingMessage(`Analysing with ${available[0].name}…`);
+    setLoadingMessage(`Analysing with ${queue[0].name}…`);
 
     let lastError;
-    for (let mi = 0; mi < available.length; mi++) {
-        const model = available[mi];
+    for (let mi = 0; mi < queue.length; mi++) {
+        const model = queue[mi];
         const apiKey = localStorage.getItem(model.keyStorageKey);
         try {
             const results = await tryModelWithRetries(model, selectedFileData, apiKey);
@@ -350,8 +360,9 @@ async function checkWorksheet() {
             return;
         } catch (err) {
             lastError = err;
-            if (isOverloadError(err) && mi < available.length - 1) {
-                const next = available[mi + 1];
+            const canSwitch = (isRateLimitError(err) || isTransientError(err)) && mi < queue.length - 1;
+            if (canSwitch) {
+                const next = queue[mi + 1];
                 setLoadingMessage(`${model.name} is unavailable. Switching to ${next.name}…`);
                 await new Promise(r => setTimeout(r, 2000));
             } else {

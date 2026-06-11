@@ -935,6 +935,24 @@ h1 {
 }
 .upload-model-badge strong { color: var(--text); }
 
+.auto-retry-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    cursor: pointer;
+    user-select: none;
+}
+.auto-retry-label input[type="checkbox"] {
+    accent-color: var(--accent);
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
 .btn-link {
     background: none;
     border: none;
