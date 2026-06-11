@@ -35,7 +35,7 @@ const MODELS = [
         id: 'llama-4-scout',
         name: 'Llama 4 Scout',
         provider: 'Groq',
-        tag: 'Fastest',
+        tag: 'Backup',
         tagClass: 'tag-fast',
         accuracy: 3,
         rpmLabel: '30 req / min',
@@ -57,66 +57,6 @@ const MODELS = [
         apiFormat: 'openai',
         endpoint: 'https://api.groq.com/openai/v1/chat/completions',
         modelId: 'meta-llama/llama-4-scout-17b-16e-instruct'
-    },
-    {
-        id: 'openrouter-gemini',
-        name: 'Gemini 2.5 Flash',
-        provider: 'OpenRouter',
-        tag: 'No Cost',
-        tagClass: 'tag-free',
-        accuracy: 5,
-        rpmLabel: 'Varies',
-        keyStorageKey: 'openrouterApiKey',
-        dbKey: 'openrouterKey',
-        icon: `<svg viewBox="0 0 28 28" width="26" height="26" aria-hidden="true">
-            <rect width="28" height="28" rx="6" fill="#6D28D9"/>
-            <circle cx="7" cy="10" r="2.5" fill="white"/>
-            <circle cx="7" cy="18" r="2.5" fill="white"/>
-            <circle cx="21" cy="14" r="2.5" fill="white"/>
-            <path d="M9.5 10.5L18.5 13.5M9.5 17.5L18.5 14.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-        </svg>`,
-        keyUrl: 'https://openrouter.ai/settings/keys',
-        keyPlaceholder: 'Paste your OpenRouter API key',
-        keyNote: '✓ Same Gemini 2.5 Flash model via OpenRouter — separate quota from AI Studio. One key covers all OpenRouter models.',
-        keySteps: [
-            { text: 'Go to ', link: { label: 'openrouter.ai/settings/keys', url: 'https://openrouter.ai/settings/keys' } },
-            { text: 'Create a free account' },
-            { text: 'Click "Create Key" and copy it' },
-            { text: 'Paste it below — free models need no credits' }
-        ],
-        apiFormat: 'openai',
-        endpoint: 'https://openrouter.ai/api/v1/chat/completions',
-        modelId: 'google/gemini-2.5-flash:free'
-    },
-    {
-        id: 'openrouter-qwen',
-        name: 'Qwen 2.5 VL 72B',
-        provider: 'OpenRouter',
-        tag: 'Alternative',
-        tagClass: 'tag-alt',
-        accuracy: 3,
-        rpmLabel: 'Varies',
-        keyStorageKey: 'openrouterApiKey',
-        dbKey: 'openrouterKey',
-        icon: `<svg viewBox="0 0 28 28" width="26" height="26" aria-hidden="true">
-            <rect width="28" height="28" rx="6" fill="#6D28D9"/>
-            <circle cx="7" cy="10" r="2.5" fill="white"/>
-            <circle cx="7" cy="18" r="2.5" fill="white"/>
-            <circle cx="21" cy="14" r="2.5" fill="white"/>
-            <path d="M9.5 10.5L18.5 13.5M9.5 17.5L18.5 14.5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-        </svg>`,
-        keyUrl: 'https://openrouter.ai/settings/keys',
-        keyPlaceholder: 'Paste your OpenRouter API key',
-        keyNote: '✓ Uses the same OpenRouter key as Gemini 2.5 Flash above. Qwen 2.5 VL is a strong vision model from Alibaba.',
-        keySteps: [
-            { text: 'Go to ', link: { label: 'openrouter.ai/settings/keys', url: 'https://openrouter.ai/settings/keys' } },
-            { text: 'Create a free account' },
-            { text: 'Click "Create Key" and copy it' },
-            { text: 'Paste it below — free models need no credits' }
-        ],
-        apiFormat: 'openai',
-        endpoint: 'https://openrouter.ai/api/v1/chat/completions',
-        modelId: 'qwen/qwen2.5-vl-72b-instruct:free'
     }
 ];
 

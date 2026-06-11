@@ -93,50 +93,57 @@ function removeFile() {
 // ─── Worksheet prompt (shared across all models) ───────────────
 
 const WORKSHEET_PROMPT =
-`You are reading a student's completed math worksheet photo. Your job is to find every printed problem and transcribe what the student wrote as their answer. Do not compute or verify any answers yourself.
+`You are checking a student's completed math worksheet. Read the handwriting only — do not compute answers yourself.
 
-STEP 1 — Correct for orientation.
-The photo may be taken at an angle or rotated. Before reading anything, mentally straighten the image so the text is upright and level.
+━━━ WHAT THE WORKSHEET LOOKS LIKE ━━━
+The page has 4 vertical columns of problems side by side. Each column is a narrow strip running top to bottom. Within each column every problem occupies one horizontal line:
 
-STEP 2 — Count every = sign in the image.
-Scan the entire image and count every printed = sign you can see. Each = sign is exactly one problem. Write this number down mentally — your final output array must contain exactly this many items. Do not proceed until you have counted every = sign including those in the rightmost columns.
+  [number]  [operator]  [number]  =  ________
 
-STEP 3 — Identify the columns.
-The worksheet is divided into vertical columns — like columns in a newspaper, running top to bottom. There are usually 4 such columns side by side. Identify where each column starts and ends horizontally before you start reading.
+The  ________  is a long printed underline. The student writes their answer ON TOP of this underline. The student's handwritten number appears directly on or just above the underline.
 
-STEP 4 — Read one complete column at a time, left to right.
-Pick the leftmost column. Read every problem in it from top to bottom. Finish the entire column before moving to the next one. Do NOT scan horizontally across the page.
+━━━ HOW TO READ IT ━━━
 
-STEP 5 — Use the printed = sign as your anchor for each line.
-Every problem has a printed = sign. Use it as your anchor:
-  • Find the = sign on the line.
-  • Read LEFT along the exact same horizontal level as that = sign: this gives you NUMBER operator NUMBER (the question).
-  • Read RIGHT along the exact same horizontal level as that = sign: this gives you the student's written answer.
+STEP 1 — Straighten the image.
+If the photo is tilted or rotated, mentally correct it first so all text is horizontal.
 
-Both numbers in the question are on the SAME horizontal level as the = sign — never above it, never below it.
+STEP 2 — Count every printed = sign across the whole image.
+Scan left to right, top to bottom, and count every = sign (including those in the 3rd and 4th columns on the right side of the page). This total is the exact number of items your output array must contain.
 
-Example of what goes wrong without this rule:
-  Line 1:  1 + 2 = ___
-  Line 2:  3 + 4 = ___
-Wrong reading: "3 + 2" (3 from line 2, but 2 borrowed from line 1 above) ✗
-Correct reading: "3 + 4" (both numbers on the same horizontal level as the = sign on line 2) ✓
+STEP 3 — Work through one column at a time, left to right.
+Start at the top of the leftmost column. Read every problem in that column from top to bottom. Only move to the next column after finishing the current one completely.
 
-STEP 6 — Transcribe the student's answer.
-Look only at the blank space to the right of the = sign on that same line.
-  • Any writing, even faint pencil — transcribe it exactly as written.
-  • Completely empty blank — use "blank".
-  • Something written but unreadable — use "unreadable".
+STEP 4 — Read each line as one self-contained problem.
+Pick the printed = sign on the line as your anchor point. On that same horizontal line:
+  • Scan LEFT of the = to find: [number] [operator] [number] — this is the question.
+  • Scan RIGHT of the = to find: the long underline with the student's handwritten answer on it.
 
-STEP 7 — Verify before returning.
-Count the items in your output array. It must equal the number of = signs you counted in Step 2. If it is less, you have missed problems — go back, find the missing = signs, and add them.
+⛔ CRITICAL — do not mix numbers across lines:
+Each line's two operands are printed on THAT LINE only.
 
-For each problem output exactly this JSON shape:
-  {"question":"47 + 83","studentAnswer":"130","correctAnswer":"","isCorrect":false}
+Here is the exact mistake to avoid:
+  Row 1 prints:  21 + 38 = ___    student wrote: 59
+  Row 2 prints:  46 + 85 = ___    student wrote: 131
 
-Always set correctAnswer to "" and isCorrect to false — the app computes these itself.
+Wrong: reading row 2 as "46 + 38" because 38 appears in row 1 directly above ✗
+Right: reading row 2 as "46 + 85" — both numbers are on row 2's own horizontal line ✓
 
-Return ONLY a JSON array with no explanation, no markdown, and no text outside the array:
-[{"question":"47 + 83","studentAnswer":"130","correctAnswer":"","isCorrect":false}, ...]`;
+The rule: every digit in the question must be on the same horizontal level as the = sign for that problem.
+
+STEP 5 — Transcribe the student's answer from the underline.
+Look at the long underline to the right of = on that line. The student's number is written on/above it.
+  • Handwriting present (even faint pencil) → transcribe the number exactly.
+  • Underline completely blank (nothing written) → use "blank".
+  • Something written but impossible to read → use "unreadable".
+
+STEP 6 — Verify the count before finishing.
+Count the items in your output. If it is less than your Step 2 count, you have skipped problems — find them and add them before returning.
+
+━━━ OUTPUT FORMAT ━━━
+Return ONLY a valid JSON array. No explanation, no markdown, no text before or after:
+[{"question":"46 + 85","studentAnswer":"131","correctAnswer":"","isCorrect":false}]
+
+Always set correctAnswer to "" and isCorrect to false — the app computes both.`;
 
 // ─── Per-format API callers ────────────────────────────────────
 
@@ -168,11 +175,6 @@ async function callOpenAICompatAPI(model, base64, mimeType, apiKey) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`
     };
-    // OpenRouter requires these headers to comply with their usage policy
-    if (model.endpoint.includes('openrouter')) {
-        headers['HTTP-Referer'] = 'https://teja1995.github.io';
-        headers['X-Title'] = 'Math Speed Trainer';
-    }
     const response = await fetch(model.endpoint, {
         method: 'POST',
         headers,

@@ -57,7 +57,7 @@ The prompt is a 7-step structured instruction. The model's only job is to read h
 - **Step 2 — Count every `=` sign:** scan the full image and count all printed `=` signs before reading any answers. Each `=` is exactly one problem. The output array must contain exactly this many items. This forces the model to acknowledge the full image including rightmost columns before it starts.
 - **Step 3 — Identify columns:** treat each column as a vertical newspaper strip; identify all column boundaries before reading
 - **Step 4 — Read one complete column at a time:** finish the entire column top-to-bottom before moving right. Never scan horizontally across the page.
-- **Step 5 — Use the `=` sign as a horizontal anchor:** for each line, find the printed `=` sign, read left at the exact same horizontal level for the question, and right for the student's answer. Both operands must be on the same horizontal level as the `=`. This was added to stop Gemini borrowing the second operand from the line above (e.g. reading `3 + 2` instead of `3 + 4` when `2` appeared on the preceding line).
+- **Step 5 — Use the `=` sign as a horizontal anchor:** for each line, find the printed `=` sign, read left at the exact same horizontal level for the question, and right for the answer (the student writes on the long printed underline after `=`). Both operands must be on the same horizontal level as the `=`. This was added to stop Gemini borrowing the second operand from the line above (e.g. reading `46 + 38` instead of `46 + 85` when `38` was the second operand on the preceding line).
 - **Step 6 — Transcribe the student's answer:** faint pencil marks count; empty blank → `"blank"`; unreadable marks → `"unreadable"`
 - **Step 7 — Self-verify:** count output array items; if fewer than the Step 2 count, find the missing problems and add them before returning
 
@@ -109,14 +109,11 @@ Models (especially Groq/OpenRouter) frequently return malformed or decorated JSO
 | # | Model | Provider | Stars | Free RPM | localStorage key | Firebase key |
 |---|---|---|---|---|---|---|
 | 1 | Gemini 2.5 Flash | Google AI Studio | ★★★★★ | 5 RPM | `geminiApiKey` | `geminiKey` |
-| 2 | Gemini 2.5 Flash (free) | OpenRouter | ★★★★★ | Varies | `openrouterApiKey` | `openrouterKey` |
-| 3 | Llama 4 Scout | Groq | ★★★ | 30 RPM | `groqApiKey` | `groqKey` |
-| 4 | Qwen 2.5 VL 72B (free) | OpenRouter | ★★★ | Varies | `openrouterApiKey` | `openrouterKey` |
+| 2 | Llama 4 Scout | Groq | ★★★ | 30 RPM | `groqApiKey` | `groqKey` |
 
 Notes:
-- Models 1 and 2 are the same Gemini 2.5 Flash model via different providers — separate quota pools. When AI Studio hits 5 RPM, auto-failover switches to OpenRouter's copy instantly.
-- OpenRouter models 2 and 4 share the same API key; saving either updates the same Firebase field
-- Llama 4 Scout accuracy is ★★★ after real-world testing showed inconsistent handwriting recognition, wrong correctAnswer values, and intermittent column-skipping
+- Gemini 2.5 Flash is the recommended model; Groq/Llama is the fallback
+- Llama 4 Scout accuracy is ★★★ — inconsistent handwriting recognition and intermittent column-skipping observed in real-world testing
 - Auto-failover skips any model with no saved key
 - The upload tab shows a small badge with the currently selected model name
 
@@ -134,7 +131,7 @@ Notes:
 |---|---|
 | Authentication | Firebase Auth (Google provider) — compat CDN v9.23.0 |
 | Database | Firebase Realtime Database — compat CDN v9.23.0 |
-| Worksheet AI | Multi-model (Gemini 2.5 Flash via AI Studio + OpenRouter, Groq Llama 4 Scout, Qwen 2.5 VL via OpenRouter) |
+| Worksheet AI | Gemini 2.5 Flash (Google AI Studio, primary) + Groq Llama 4 Scout (backup) |
 | PDF rendering | pdf.js v3.11.174 (CDN) |
 | Charts | Chart.js v4.4.0 (CDN) |
 | Fonts | Inter (Google Fonts) |
@@ -263,12 +260,7 @@ Apply in: Firebase Console → Realtime Database → Rules → Publish.
 - Free tier: 30 RPM, 14,400 req/day
 - Uses OpenAI-compatible endpoint with `meta-llama/llama-4-scout-17b-16e-instruct`
 
-### OpenRouter (Gemini 2.5 Flash free, Qwen 2.5 VL)
-- Get from: **openrouter.ai/settings/keys** (free account)
-- Free `:free` model variants — may have rate limits and queue delays
-- One key covers both OpenRouter models (`google/gemini-2.5-flash:free` and `qwen/qwen2.5-vl-72b-instruct:free`)
-- OpenRouter requests include `HTTP-Referer: https://teja1995.github.io` per their usage policy
-- Primary purpose: acts as overflow for AI Studio when it hits 5 RPM — same Gemini 2.5 Flash model, separate quota
+*(OpenRouter removed — unreliable free tier and added complexity without meaningful accuracy gain)*
 
 ---
 
