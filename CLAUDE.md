@@ -59,8 +59,11 @@ firebase-config.js  — Firebase project credentials + initialises firebase + db
 - Every problem visible on the sheet must appear in the output array
 - If the entire sheet appears unanswered, every `studentAnswer` must be `"blank"` and every `isCorrect` must be `false`
 
+**Client-side math verification (`upload.js → verifyMath`):**
+Before rendering, `verifyMath(results)` runs over every row. It calls `computeAnswer(questionStr)` which parses the question string and computes the correct answer in JavaScript (handles `+`, `−`, `×`, and fraction-as-percentage). The computed value overwrites `r.correctAnswer` and `r.isCorrect` is re-evaluated with 0.01 tolerance. This means AI math errors can never affect the final verdict — models only need to read handwriting, all arithmetic is done client-side.
+
 **Client-side blank/unreadable enforcement (`upload.js → displayWorksheetResults`):**
-Before rendering results, the app iterates every row and forces `isCorrect = false` if `studentAnswer` is `"blank"` or `"unreadable"`. This is a safety net in case a model ignores the prompt instruction.
+After `verifyMath`, the app additionally forces `isCorrect = false` for any row where `studentAnswer` is `"blank"` or `"unreadable"`. Safety net in case a model ignores the prompt instruction.
 
 **JSON response parsing (`upload.js → parseAIJSON`):**
 Models (especially Groq/OpenRouter) frequently return malformed or decorated JSON. Five recovery passes are tried in order before giving up:
@@ -102,8 +105,6 @@ Models (especially Groq/OpenRouter) frequently return malformed or decorated JSO
 
 | # | Model | Provider | Stars | Free RPM | localStorage key | Firebase key |
 |---|---|---|---|---|---|---|
-| # | Model | Provider | Stars | Free RPM | localStorage key | Firebase key |
-|---|---|---|---|---|---|---|
 | 1 | Gemini 2.5 Flash | Google AI Studio | ★★★★★ | 5 RPM | `geminiApiKey` | `geminiKey` |
 | 2 | Gemini 2.5 Flash (free) | OpenRouter | ★★★★★ | Varies | `openrouterApiKey` | `openrouterKey` |
 | 3 | Llama 4 Scout | Groq | ★★★ | 30 RPM | `groqApiKey` | `groqKey` |
@@ -130,7 +131,7 @@ Notes:
 |---|---|
 | Authentication | Firebase Auth (Google provider) — compat CDN v9.23.0 |
 | Database | Firebase Realtime Database — compat CDN v9.23.0 |
-| Worksheet AI | Multi-model (Gemini 2.5 Flash, Groq Llama 4 Scout, OpenRouter) |
+| Worksheet AI | Multi-model (Gemini 2.5 Flash via AI Studio + OpenRouter, Groq Llama 4 Scout, Qwen 2.5 VL via OpenRouter) |
 | PDF rendering | pdf.js v3.11.174 (CDN) |
 | Charts | Chart.js v4.4.0 (CDN) |
 | Fonts | Inter (Google Fonts) |
@@ -257,11 +258,12 @@ Apply in: Firebase Console → Realtime Database → Rules → Publish.
 - Free tier: 30 RPM, 14,400 req/day
 - Uses OpenAI-compatible endpoint with `meta-llama/llama-4-scout-17b-16e-instruct`
 
-### OpenRouter (Gemini 2.0 Flash free, Qwen 2.5 VL)
+### OpenRouter (Gemini 2.5 Flash free, Qwen 2.5 VL)
 - Get from: **openrouter.ai/settings/keys** (free account)
 - Free `:free` model variants — may have rate limits and queue delays
-- One key covers both OpenRouter models (gemini-2.0-flash-exp:free and qwen2.5-vl-72b-instruct:free)
+- One key covers both OpenRouter models (`google/gemini-2.5-flash:free` and `qwen/qwen2.5-vl-72b-instruct:free`)
 - OpenRouter requests include `HTTP-Referer: https://teja1995.github.io` per their usage policy
+- Primary purpose: acts as overflow for AI Studio when it hits 5 RPM — same Gemini 2.5 Flash model, separate quota
 
 ---
 
@@ -272,7 +274,8 @@ Apply in: Firebase Console → Realtime Database → Rules → Publish.
 | Realtime Database instead of Firestore | Firestore requires billing/card details; RTDB free tier does not |
 | `gemini-2.5-flash` (v1beta) as default/recommended | 2.0 Flash and 1.5 Flash show 0/0 RPM on free tier AI Studio keys; 2.5 Flash has confirmed 5 RPM |
 | Multi-model support (Groq, OpenRouter) | Gemini 2.5 Flash has only 5 RPM — during high demand the model is unavailable; alternatives provide failover |
-| Auto-failover to next model after 3 retries | Avoids silent failures: 3 retries on the selected model, then switches transparently to the next available model |
+| 429 triggers immediate failover, 503 retries with backoff | Rate-limit errors mean quota is exhausted — retrying the same model for 50s is pointless. 503/overload is transient, so backoff + retry makes sense. Splitting the two error types eliminated long waits on Gemini's 5 RPM limit. |
+| OpenRouter slot changed from Gemini 2.0 Flash to Gemini 2.5 Flash | Gemini 2.5 Flash on OpenRouter (`google/gemini-2.5-flash:free`) is the same model as AI Studio but uses a separate quota pool. When AI Studio hits 5 RPM the failover is lossless — same accuracy, no quality degradation. |
 | OpenAI-compatible format for Groq/OpenRouter | Both use the same `/v1/chat/completions` format with `image_url` content type — one code path serves both |
 | Model keys stored in Firebase (not only localStorage) | Mobile browsers clear localStorage; Firebase persists keys across devices and browser resets |
 | No format validation on API keys | Prefix checks like `AIza` were rejecting valid keys; wrong keys now fail gracefully at the API with a clear message |
