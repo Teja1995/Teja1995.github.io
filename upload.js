@@ -123,7 +123,7 @@ async function callGeminiAPI(model, base64, mimeType, apiKey) {
                     { inline_data: { mime_type: mimeType, data: base64 } }
                 ]
             }],
-            generationConfig: { temperature: 0.1 }
+            generationConfig: { temperature: 0.1, maxOutputTokens: 8192 }
         })
     });
     if (!response.ok) {
@@ -157,7 +157,8 @@ async function callOpenAICompatAPI(model, base64, mimeType, apiKey) {
                     { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } }
                 ]
             }],
-            temperature: 0.1
+            temperature: 0.1,
+            max_tokens: 8192
         })
     });
     if (!response.ok) {
@@ -184,15 +185,38 @@ function logParseError(modelName, rawText, errorMsg) {
 }
 
 function parseAIJSON(text, modelName = 'unknown') {
-    // Strip all markdown fences (```json ... ``` or ``` ... ```)
-    const stripped = text.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim();
+    // Strip markdown fences
+    let s = text.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim();
 
-    // Try strict pattern first: array of objects [ { … } ]
-    // Avoids matching preamble text like "[note: 4 columns detected]"
-    let match = stripped.match(/\[\s*\{[\s\S]*\}\s*\]/);
+    // ── Pre-processing: fix known Llama output quirks before regex matching ──
 
-    // Fallback: any [...] in case the model returned an empty array or unusual spacing
-    if (!match) match = stripped.match(/\[[\s\S]*?\]/);
+    // 1. Truncated response: has [ but no closing ] — close it after the last }
+    if (s.includes('[') && !s.includes(']')) {
+        const openAt  = s.indexOf('[');
+        const lastObj = s.lastIndexOf('}');
+        if (openAt !== -1 && lastObj > openAt) {
+            s = s.slice(openAt, lastObj + 1) + ']';
+        }
+    }
+
+    // 2. Missing studentAnswer value → insert "blank"
+    //    e.g. "studentAnswer","correctAnswer": → "studentAnswer":"blank","correctAnswer":
+    s = s.replace(/"studentAnswer"\s*,\s*"(\w+)":/g, '"studentAnswer":"blank","$1":');
+
+    // 3. Other missing key values → insert empty string
+    //    e.g. "correctAnswer","isCorrect": → "correctAnswer":"","isCorrect":
+    s = s.replace(/"(\w+)"\s*,\s*"(\w+)":/g, '"$1":"","$2":');
+
+    // 4. Strip trailing commas (common across all models)
+    s = s.replace(/,\s*([}\]])/g, '$1');
+
+    // ── Regex extraction ──────────────────────────────────────────────────────
+
+    // Strict: array of objects — avoids matching preamble like "[note: 4 columns]"
+    let match = s.match(/\[\s*\{[\s\S]*\}\s*\]/);
+
+    // Loose fallback: any [...]
+    if (!match) match = s.match(/\[[\s\S]*?\]/);
 
     if (!match) {
         const msg = 'No JSON array found in model response';
