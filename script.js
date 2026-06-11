@@ -3,29 +3,69 @@ let correctCount = 0;
 let incorrectCount = 0;
 let practiceOngoing = false;
 let timerPaused = false;
+let sessionDurationMin = 0;
+
+// ─── Tab routing ───────────────────────────────────────────────
+
+function showTab(tabName) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + tabName).classList.remove('hidden');
+    document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+
+    if (tabName === 'performance') loadPerformanceData();
+    if (tabName === 'settings') {
+        const saved = localStorage.getItem('geminiApiKey');
+        if (saved) document.getElementById('gemini-key').value = saved;
+    }
+}
+
+function closeModal(id) {
+    document.getElementById(id).classList.add('hidden');
+}
+
+// ─── Settings ──────────────────────────────────────────────────
+
+function saveGeminiKey() {
+    const key = document.getElementById('gemini-key').value.trim();
+    const status = document.getElementById('key-status');
+
+    if (!key || !key.startsWith('AIza')) {
+        status.textContent = 'Invalid key — Gemini keys start with "AIza".';
+        status.className = 'key-status error';
+        status.classList.remove('hidden');
+        return;
+    }
+
+    localStorage.setItem('geminiApiKey', key);
+    status.textContent = 'API key saved successfully.';
+    status.className = 'key-status success';
+    status.classList.remove('hidden');
+}
+
+// ─── Practice ──────────────────────────────────────────────────
 
 function initializeQuote() {
     const quotes = [
         "No matter how you feel, get up, dress up and never give up",
         "Believe you can and you're halfway there",
         "The only way to do great work is to love what you do",
-        "Success is not final, failure is not fatal: it is the courage to continue that counts",
         "Push yourself, because no one else is going to do it for you",
         "Great things never come from comfort zones",
         "Dream it. Wish it. Do it.",
-        "The harder you work for something, the greater you'll feel when you achieve it",
+        "The harder you work, the greater you'll feel when you achieve it",
         "Don't stop when you're tired. Stop when you're done",
-        "Wake up with determination. Go to bed with satisfaction",
         "Do something today that your future self will thank you for",
         "It's going to be hard, but hard does not mean impossible",
-        "Don't wait for opportunity. Create it",
         "The key to success is to focus on goals, not obstacles",
     ];
 
     const quote = quotes[Math.floor(Math.random() * quotes.length)];
-    const feedbackCard = document.getElementById('correct-answer-container');
-    feedbackCard.textContent = `"${quote}"`;
-    feedbackCard.className = 'card feedback-card is-neutral';
+    const card = document.getElementById('correct-answer-container');
+    if (card) {
+        card.textContent = `"${quote}"`;
+        card.className = 'card feedback-card is-neutral';
+    }
 }
 
 window.addEventListener('load', initializeQuote);
@@ -45,6 +85,7 @@ function startPractice() {
         return;
     }
 
+    sessionDurationMin = inputVal;
     time = inputVal * 60;
     clearInterval(timer);
     timer = setInterval(countdown, 1000);
@@ -75,7 +116,6 @@ function generateMultiplicationQuestion(container) {
         num1 = Math.floor(Math.random() * 800) + 100;
         num2 = Math.floor(Math.random() * 8) + 2;
     } while (num1 % 100 === 0);
-
     displayQuestion(container, `${num1} × ${num2} = ?`, num1 * num2);
 }
 
@@ -91,19 +131,13 @@ function generateArithmeticQuestion(container) {
     let questionText, answer;
 
     switch (op) {
-        case '+':
-            questionText = `${num1} + ${num2} = ?`;
-            answer = num1 + num2;
-            break;
+        case '+': questionText = `${num1} + ${num2} = ?`; answer = num1 + num2; break;
         case '-':
             if (num1 < num2) [num1, num2] = [num2, num1];
             questionText = `${num1} - ${num2} = ?`;
             answer = num1 - num2;
             break;
-        case '×':
-            questionText = `${num1} × ${num2} = ?`;
-            answer = num1 * num2;
-            break;
+        case '×': questionText = `${num1} × ${num2} = ?`; answer = num1 * num2; break;
     }
 
     displayQuestion(container, questionText, answer);
@@ -133,7 +167,7 @@ function displayQuestion(container, questionText, correctAnswer) {
     container.appendChild(answerInput);
     answerInput.focus();
 
-    answerInput.addEventListener('keydown', function(event) {
+    answerInput.addEventListener('keydown', function (event) {
         if (event.key === 'Enter') {
             event.preventDefault();
             submitAnswer(answerInput, correctAnswer);
@@ -144,11 +178,8 @@ function displayQuestion(container, questionText, correctAnswer) {
 function submitAnswer(answerInput, correctAnswer) {
     const userAnswer = parseFloat(answerInput.value);
     if (isNaN(userAnswer)) return;
-
     checkAnswer(userAnswer, correctAnswer);
-    if (practiceOngoing && !timerPaused) {
-        generateQuestion();
-    }
+    if (practiceOngoing && !timerPaused) generateQuestion();
 }
 
 function checkAnswer(userAnswer, correctAnswer) {
@@ -169,8 +200,6 @@ function checkAnswer(userAnswer, correctAnswer) {
 
 function displayFeedback(isCorrect, correctAnswer) {
     const card = document.getElementById('correct-answer-container');
-
-    // Reset class to re-trigger animation
     card.className = 'card feedback-card';
     void card.offsetWidth;
 
@@ -205,10 +234,7 @@ function countdown() {
     const seconds = time % 60;
     const timerEl = document.getElementById('timer');
     timerEl.textContent = `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
-
-    if (time <= 30) {
-        timerEl.classList.add('warning');
-    }
+    if (time <= 30) timerEl.classList.add('warning');
 }
 
 function updateResult() {
@@ -216,25 +242,35 @@ function updateResult() {
     document.getElementById('incorrect-count').textContent = incorrectCount;
 }
 
-function pausePractice() {
-    timerPaused = true;
-}
+function pausePractice() { timerPaused = true; }
 
 function resumePractice() {
     timerPaused = false;
     generateQuestion();
 }
 
-function endPractice() {
+async function endPractice() {
     clearInterval(timer);
     practiceOngoing = false;
 
     document.getElementById('question-container').innerHTML = '';
     document.getElementById('timer').textContent = '0:00';
 
-    const total = correctCount + incorrectCount;
-    const pct = total > 0 ? Math.round((correctCount / total) * 100) : 0;
+    const totalQ = correctCount + incorrectCount;
+    const pct = totalQ > 0 ? Math.round((correctCount / totalQ) * 100) : 0;
     const card = document.getElementById('correct-answer-container');
     card.className = 'card feedback-card is-done';
-    card.textContent = `Session complete! ${correctCount}/${total} correct (${pct}%)`;
+    card.textContent = `Session complete! ${correctCount}/${totalQ} correct (${pct}%)`;
+
+    if (currentUser && sessionDurationMin > 0 && totalQ > 0) {
+        const qPerMin = parseFloat((totalQ / sessionDurationMin).toFixed(2));
+        await saveSession({
+            date: new Date().toISOString(),
+            durationMin: sessionDurationMin,
+            correct: correctCount,
+            incorrect: incorrectCount,
+            totalQ,
+            qPerMin
+        });
+    }
 }

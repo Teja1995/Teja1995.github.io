@@ -10,53 +10,304 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+
+    <!-- Ambient background orbs (shared across views) -->
     <div class="orb orb-1"></div>
     <div class="orb orb-2"></div>
     <div class="orb orb-3"></div>
 
-    <div class="main-container">
-        <header class="hero">
+    <!-- ═══════════════════════════════════════
+         SIGN-IN VIEW
+    ═══════════════════════════════════════ -->
+    <div id="view-signin">
+        <div class="signin-card card">
             <div class="logo-icon">∑</div>
             <h1>Math Speed Trainer</h1>
-            <p class="tagline">Sharpen your mental math</p>
-        </header>
-
-        <div class="card setup-card">
-            <label for="timeInput">Session duration</label>
-            <div class="time-input-row">
-                <input type="number" id="timeInput" min="1" placeholder="5">
-                <span class="unit">minutes</span>
-            </div>
-            <div class="button-row">
-                <button class="btn btn-primary" onclick="startPractice()">▶ Start</button>
-                <button class="btn btn-ghost" onclick="pausePractice()">⏸ Pause</button>
-                <button class="btn btn-ghost" onclick="resumePractice()">▶ Resume</button>
-            </div>
+            <p class="tagline">Track your progress, sharpen your skills</p>
+            <button class="google-btn" onclick="signInWithGoogle()">
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">
+                    <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                    <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                    <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                    <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+                </svg>
+                Sign in with Google
+            </button>
         </div>
-
-        <div class="info-row">
-            <div class="card score-card">
-                <div class="score correct">
-                    <span class="score-num" id="correct-count">0</span>
-                    <span class="score-label">Correct</span>
-                </div>
-                <div class="score-sep"></div>
-                <div class="score wrong">
-                    <span class="score-num" id="incorrect-count">0</span>
-                    <span class="score-label">Wrong</span>
-                </div>
-            </div>
-            <div class="card timer-card">
-                <div id="timer">--:--</div>
-                <span class="timer-label">remaining</span>
-            </div>
-        </div>
-
-        <div id="question-container" class="card question-card"></div>
-        <div id="result-container"></div>
-        <div id="correct-answer-container" class="card feedback-card"></div>
     </div>
 
+    <!-- ═══════════════════════════════════════
+         APP VIEW (shown after sign-in)
+    ═══════════════════════════════════════ -->
+    <div id="view-app" class="hidden">
+
+        <!-- Header -->
+        <header class="app-header">
+            <div class="app-brand">
+                <span class="brand-icon">∑</span>
+                <span class="brand-name">Math Speed Trainer</span>
+            </div>
+            <div class="user-area">
+                <img id="user-avatar" class="avatar" alt="User avatar">
+                <span id="user-name" class="user-name-text"></span>
+                <button class="btn-signout" onclick="signOut()">Sign out</button>
+            </div>
+        </header>
+
+        <!-- Tab navigation -->
+        <nav class="tab-nav">
+            <button class="tab-btn active" data-tab="practice"    onclick="showTab('practice')">Practice</button>
+            <button class="tab-btn"        data-tab="upload"      onclick="showTab('upload')">Check Worksheet</button>
+            <button class="tab-btn"        data-tab="performance" onclick="showTab('performance')">My Performance</button>
+            <button class="tab-btn"        data-tab="settings"    onclick="showTab('settings')">Settings</button>
+        </nav>
+
+        <!-- ── Tab: Practice ── -->
+        <div id="tab-practice" class="tab-content">
+            <div class="main-container">
+
+                <div class="card setup-card">
+                    <label for="timeInput">Session duration</label>
+                    <div class="time-input-row">
+                        <input type="number" id="timeInput" min="1" placeholder="5">
+                        <span class="unit">minutes</span>
+                    </div>
+                    <div class="button-row">
+                        <button class="btn btn-primary" onclick="startPractice()">▶ Start</button>
+                        <button class="btn btn-ghost"   onclick="pausePractice()">⏸ Pause</button>
+                        <button class="btn btn-ghost"   onclick="resumePractice()">▶ Resume</button>
+                    </div>
+                </div>
+
+                <div class="info-row">
+                    <div class="card score-card">
+                        <div class="score correct">
+                            <span class="score-num" id="correct-count">0</span>
+                            <span class="score-label">Correct</span>
+                        </div>
+                        <div class="score-sep"></div>
+                        <div class="score wrong">
+                            <span class="score-num" id="incorrect-count">0</span>
+                            <span class="score-label">Wrong</span>
+                        </div>
+                    </div>
+                    <div class="card timer-card">
+                        <div id="timer">--:--</div>
+                        <span class="timer-label">remaining</span>
+                    </div>
+                </div>
+
+                <div id="question-container"      class="card question-card"></div>
+                <div id="result-container"></div>
+                <div id="correct-answer-container" class="card feedback-card"></div>
+
+            </div>
+        </div>
+
+        <!-- ── Tab: Upload Worksheet ── -->
+        <div id="tab-upload" class="tab-content hidden">
+            <div class="main-container wide">
+
+                <div class="card">
+                    <h2 class="section-title">Check Your Worksheet</h2>
+                    <p class="section-desc">
+                        Upload a photo or scan of your completed math worksheet.
+                        Our AI will identify each question and check your answers.
+                    </p>
+
+                    <div class="upload-zone" id="upload-zone">
+                        <div class="upload-icon">📄</div>
+                        <p class="upload-text">Drag &amp; drop a file here, or click to browse</p>
+                        <p class="upload-hint">Supports JPG, PNG, PDF</p>
+                        <input type="file" id="worksheet-input"
+                               accept=".pdf,.jpg,.jpeg,.png"
+                               onchange="handleFileSelect(event)">
+                    </div>
+
+                    <div id="file-preview" class="hidden">
+                        <div class="file-selected">
+                            <span class="file-icon">📎</span>
+                            <span id="file-name-display"></span>
+                            <button class="btn-remove-file" onclick="removeFile()" aria-label="Remove file">✕</button>
+                        </div>
+                        <canvas id="pdf-canvas" class="preview-canvas hidden"></canvas>
+                        <img id="image-preview" class="preview-image hidden" alt="Worksheet preview">
+                    </div>
+
+                    <button class="btn btn-primary btn-full" id="check-btn"
+                            onclick="checkWorksheet()" disabled>
+                        Check Answers
+                    </button>
+                </div>
+
+                <div id="upload-loading" class="hidden">
+                    <div class="card loading-card">
+                        <div class="spinner"></div>
+                        <p>Analysing your worksheet…</p>
+                    </div>
+                </div>
+
+                <div id="upload-results" class="hidden">
+                    <div class="card">
+                        <div class="results-header">
+                            <h3 class="section-title">Results</h3>
+                            <div class="results-summary">
+                                <span class="results-correct" id="results-correct-count"></span>
+                                <span class="results-wrong"   id="results-wrong-count"></span>
+                            </div>
+                        </div>
+                        <div class="table-wrap">
+                            <table class="results-table">
+                                <thead>
+                                    <tr>
+                                        <th>#</th>
+                                        <th>Question</th>
+                                        <th>Your Answer</th>
+                                        <th>Correct Answer</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="results-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ── Tab: My Performance ── -->
+        <div id="tab-performance" class="tab-content hidden">
+            <div class="main-container wide">
+
+                <div class="card">
+                    <div class="perf-header">
+                        <h2 class="section-title">My Performance</h2>
+                        <button class="btn btn-ghost btn-sm" onclick="showAddSessionModal()">+ Add Session</button>
+                    </div>
+                    <div class="chart-wrap">
+                        <canvas id="performance-chart"></canvas>
+                        <p class="chart-empty hidden" id="chart-empty">
+                            Complete a practice session to see your performance chart.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3 class="section-title">Session History</h3>
+                    <div class="table-wrap">
+                        <table class="history-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Duration</th>
+                                    <th>Correct</th>
+                                    <th>Wrong</th>
+                                    <th>Speed (Q/min)</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="history-tbody">
+                                <tr>
+                                    <td colspan="6" class="empty-row">
+                                        No sessions yet. Complete a practice session to see history.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ── Tab: Settings ── -->
+        <div id="tab-settings" class="tab-content hidden">
+            <div class="main-container">
+                <div class="card">
+                    <h2 class="section-title">Settings</h2>
+
+                    <div class="settings-group">
+                        <label class="settings-label" for="gemini-key">Gemini API Key</label>
+                        <p class="settings-hint">
+                            Required for the "Check Worksheet" feature.
+                            Get a free key from
+                            <a href="https://aistudio.google.com" target="_blank" rel="noopener noreferrer">
+                                aistudio.google.com
+                            </a>.
+                            Keys start with <code>AIza</code>.
+                        </p>
+                        <div class="api-key-row">
+                            <input type="password" id="gemini-key"
+                                   class="settings-input" placeholder="AIza…">
+                            <button class="btn btn-primary" onclick="saveGeminiKey()">Save</button>
+                        </div>
+                        <p id="key-status" class="key-status hidden"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div><!-- /view-app -->
+
+    <!-- ═══════════════════════════════════════
+         MODALS
+    ═══════════════════════════════════════ -->
+
+    <!-- Add session manually -->
+    <div id="add-session-modal" class="modal-overlay hidden">
+        <div class="modal card">
+            <h3 class="modal-title">Add Practice Session</h3>
+            <div class="modal-field">
+                <label for="ms-date">Date</label>
+                <input type="date" id="ms-date" class="settings-input">
+            </div>
+            <div class="modal-field">
+                <label for="ms-duration">Duration (minutes)</label>
+                <input type="number" id="ms-duration" class="settings-input" min="1" placeholder="5">
+            </div>
+            <div class="modal-field">
+                <label for="ms-correct">Correct Answers</label>
+                <input type="number" id="ms-correct" class="settings-input" min="0" placeholder="0">
+            </div>
+            <div class="modal-field">
+                <label for="ms-incorrect">Wrong Answers</label>
+                <input type="number" id="ms-incorrect" class="settings-input" min="0" placeholder="0">
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-ghost"   onclick="closeModal('add-session-modal')">Cancel</button>
+                <button class="btn btn-primary" onclick="addSessionManually()">Add</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm delete session -->
+    <div id="delete-session-modal" class="modal-overlay hidden">
+        <div class="modal card">
+            <h3 class="modal-title">Delete Session?</h3>
+            <p class="modal-desc">
+                This session record will be permanently removed from your history and chart.
+            </p>
+            <div class="modal-actions">
+                <button class="btn btn-ghost"   onclick="closeModal('delete-session-modal')">Cancel</button>
+                <button class="btn btn-danger"  onclick="confirmDeleteSession()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════
+         SCRIPTS (order matters)
+    ═══════════════════════════════════════ -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+    <script src="firebase-config.js"></script>
+    <script src="auth.js"></script>
     <script src="script.js"></script>
+    <script src="upload.js"></script>
+    <script src="performance.js"></script>
 </body>
 </html>
