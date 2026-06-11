@@ -132,7 +132,7 @@ async function callGeminiAPI(model, base64, mimeType, apiKey) {
     }
     const data = await response.json();
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    return parseAIJSON(text);
+    return parseAIJSON(text, model.name);
 }
 
 async function callOpenAICompatAPI(model, base64, mimeType, apiKey) {
@@ -166,10 +166,24 @@ async function callOpenAICompatAPI(model, base64, mimeType, apiKey) {
     }
     const data = await response.json();
     const text = data.choices?.[0]?.message?.content || '';
-    return parseAIJSON(text);
+    return parseAIJSON(text, model.name);
 }
 
-function parseAIJSON(text) {
+// ─── Parse error logger ────────────────────────────────────────
+
+function logParseError(modelName, rawText, errorMsg) {
+    if (!currentUser) return;
+    try {
+        db.ref('error_logs/' + currentUser.uid).push({
+            ts:       new Date().toISOString(),
+            model:    modelName,
+            error:    errorMsg,
+            response: rawText.slice(0, 3000)   // cap at 3 KB — no images
+        });
+    } catch (e) { /* never surface logging failures to the user */ }
+}
+
+function parseAIJSON(text, modelName = 'unknown') {
     // Strip all markdown fences (```json ... ``` or ``` ... ```)
     const stripped = text.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim();
 
@@ -181,7 +195,9 @@ function parseAIJSON(text) {
     if (!match) match = stripped.match(/\[[\s\S]*?\]/);
 
     if (!match) {
-        console.error('[worksheet] No array found. Raw model output:', text);
+        const msg = 'No JSON array found in model response';
+        console.error('[worksheet]', msg, text);
+        logParseError(modelName, text, msg);
         const preview = text.slice(0, 200).replace(/\n/g, ' ');
         throw new Error(`The AI did not return a recognisable answer list. Try again.\n\nModel responded: "${preview}"`);
     }
@@ -224,7 +240,9 @@ function parseAIJSON(text) {
         if (objects.length > 0) return objects;
     } catch {}
 
-    console.error('[worksheet] All parse passes failed. Raw model output:', text.slice(0, 600));
+    const msg = 'All 5 parse passes failed';
+    console.error('[worksheet]', msg, text.slice(0, 600));
+    logParseError(modelName, text, msg);
     throw new Error('The AI returned a response this app could not read. Please try again or switch models in Settings.');
 }
 

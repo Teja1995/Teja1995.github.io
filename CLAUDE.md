@@ -173,7 +173,17 @@ users/
     geminiKey       — string (Google AI Studio key)
     groqKey         — string (Groq API key)
     openrouterKey   — string (OpenRouter API key, used for both OR models)
+
+error_logs/
+  {uid}/
+    {pushId}/
+      ts        — ISO 8601 string (when the failure occurred)
+      model     — string (model name that returned the bad response)
+      error     — string (which failure point triggered: "No JSON array found" or "All 5 parse passes failed")
+      response  — string (raw model text, capped at 3000 chars — no image data stored)
 ```
+
+`error_logs` is written automatically whenever `parseAIJSON` cannot recover the model's response. Review in Firebase Console → Realtime Database → `error_logs/{uid}/`. Image base64 is never stored here.
 
 ---
 
@@ -189,6 +199,12 @@ users/
       }
     },
     "users": {
+      "$uid": {
+        ".read": "$uid === auth.uid",
+        ".write": "$uid === auth.uid"
+      }
+    },
+    "error_logs": {
       "$uid": {
         ".read": "$uid === auth.uid",
         ".write": "$uid === auth.uid"
