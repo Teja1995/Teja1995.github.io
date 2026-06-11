@@ -104,14 +104,22 @@ The worksheet is divided into vertical columns — think of them like columns in
 STEP 3 — Read one complete column at a time, left to right.
 Pick the leftmost column. Read every problem in it from top to bottom. Finish the entire column before moving to the next one. Do NOT scan horizontally across the page.
 
-STEP 4 — Read each problem as one self-contained line.
-Every problem occupies exactly one horizontal line within its column:
-  NUMBER  operator  NUMBER  =  ______
-All parts — both numbers, the operator, and the answer blank — live on that single line.
-CRITICAL: Never take a number from one line and pair it with a number from a different line. Each line is one complete, independent problem.
+STEP 4 — Use the printed = sign as your anchor for each line.
+Every problem has a printed = sign. Use it as your anchor:
+  • Find the = sign on the line.
+  • Read LEFT along the exact same horizontal level as that = sign: this gives you NUMBER operator NUMBER (the question).
+  • Read RIGHT along the exact same horizontal level as that = sign: this gives you the student's written answer.
+
+Both numbers in the question are on the SAME horizontal level as the = sign — never above it, never below it.
+
+Example of what goes wrong without this rule:
+  Line 1:  1 + 2 = ___
+  Line 2:  3 + 4 = ___
+Wrong reading: "3 + 2" (3 from line 2, but 2 borrowed from line 1 above) ✗
+Correct reading: "3 + 4" (both numbers on the same line as the = sign on line 2) ✓
 
 STEP 5 — Transcribe the student's answer.
-Look only at the blank space after the = sign on that line.
+Look only at the blank space to the right of the = sign on that same line.
   • Any writing, even faint pencil — transcribe it exactly as written.
   • Completely empty blank — use "blank".
   • Something written but unreadable — use "unreadable".
