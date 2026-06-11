@@ -186,9 +186,34 @@ async function callOpenAICompatAPI(model, base64, mimeType, apiKey) {
 }
 
 function parseAIJSON(text) {
-    const match = text.match(/\[[\s\S]*\]/);
-    if (!match) throw new Error('Could not parse AI response. Try again.');
-    return JSON.parse(match[0]);
+    // Strip markdown fences the model sometimes wraps around JSON
+    const stripped = text.replace(/```[a-z]*\n?/gi, '').trim();
+
+    const match = stripped.match(/\[[\s\S]*\]/);
+    if (!match) throw new Error('The AI did not return a recognisable answer list. Try again.');
+
+    let jsonStr = match[0];
+
+    // Pass 1 – direct parse (ideal path)
+    try { return JSON.parse(jsonStr); } catch {}
+
+    // Pass 2 – remove trailing commas before ] or } (very common model mistake)
+    try {
+        const cleaned = jsonStr.replace(/,\s*([}\]])/g, '$1');
+        return JSON.parse(cleaned);
+    } catch {}
+
+    // Pass 3 – truncate to last fully-closed object in case the response was cut off
+    try {
+        const lastBrace = jsonStr.lastIndexOf('}');
+        if (lastBrace > 0) {
+            const truncated = (jsonStr.slice(0, lastBrace + 1) + ']').replace(/,\s*([}\]])/g, '$1');
+            const parsed = JSON.parse(truncated);
+            if (parsed.length > 0) return parsed;
+        }
+    } catch {}
+
+    throw new Error('Could not read the AI response — the model returned malformed JSON. Please try again.');
 }
 
 async function callModel(model, { base64, mimeType }, apiKey) {
