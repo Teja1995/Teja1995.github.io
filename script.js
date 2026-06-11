@@ -5,6 +5,55 @@ let practiceOngoing = false;
 let timerPaused = false;
 let sessionDurationMin = 0;
 
+// ─── Operation registry ────────────────────────────────────────
+
+const OPERATIONS = [
+    { id: 'addition',       label: 'Addition',       symbol: '+', fn: generateAdditionQuestion },
+    { id: 'subtraction',    label: 'Subtraction',    symbol: '−', fn: generateSubtractionQuestion },
+    { id: 'multiplication', label: 'Multiplication', symbol: '×', fn: generateMultiplicationQuestion },
+    { id: 'percentages',    label: 'Percentages',    symbol: '%', fn: generatePercentageQuestion },
+];
+
+function getSelectedOps() {
+    try {
+        const saved = JSON.parse(localStorage.getItem('selectedOps'));
+        if (Array.isArray(saved) && saved.length > 0) return saved;
+    } catch {}
+    return OPERATIONS.map(o => o.id); // default: all selected
+}
+
+function saveSelectedOps(ops) {
+    localStorage.setItem('selectedOps', JSON.stringify(ops));
+}
+
+function toggleOperation(id) {
+    const current = getSelectedOps();
+    const idx = current.indexOf(id);
+    if (idx >= 0) {
+        if (current.length === 1) return; // must keep at least one
+        current.splice(idx, 1);
+    } else {
+        current.push(id);
+    }
+    saveSelectedOps(current);
+    renderOperationSelector();
+    document.getElementById('op-selector-error').classList.add('hidden');
+}
+
+function renderOperationSelector() {
+    const container = document.getElementById('operation-selector');
+    if (!container) return;
+    const selected = getSelectedOps();
+    container.innerHTML = OPERATIONS.map(op => `
+        <button class="op-chip ${selected.includes(op.id) ? 'active' : ''}"
+                onclick="toggleOperation('${op.id}')"
+                aria-pressed="${selected.includes(op.id)}">
+            <span class="op-symbol">${op.symbol}</span>
+            ${op.label}
+        </button>
+    `).join('');
+}
+
 // ─── Tab routing ───────────────────────────────────────────────
 
 function showTab(tabName) {
@@ -36,9 +85,9 @@ function renderModelGrid() {
     const selectedId = localStorage.getItem('selectedModel') || 'gemini-2.5-flash';
 
     grid.innerHTML = MODELS.map(model => {
-        const hasKey  = !!localStorage.getItem(model.keyStorageKey);
+        const hasKey     = !!localStorage.getItem(model.keyStorageKey);
         const isSelected = model.id === selectedId;
-        const stars   = '★'.repeat(model.accuracy) + '☆'.repeat(5 - model.accuracy);
+        const stars      = '★'.repeat(model.accuracy) + '☆'.repeat(5 - model.accuracy);
 
         return `
         <div class="model-card ${isSelected ? 'selected' : ''}"
@@ -79,7 +128,6 @@ function renderModelKeyPanel(modelId) {
     const savedKey = localStorage.getItem(model.keyStorageKey) || '';
     const hasKey   = !!savedKey;
 
-    // Build guide steps HTML
     const stepsHtml = model.keySteps.map((step, i) => {
         const content = step.link
             ? `${step.text}<a href="${step.link.url}" target="_blank" rel="noopener noreferrer">${step.link.label}</a>`
@@ -109,7 +157,7 @@ function renderModelKeyPanel(modelId) {
 }
 
 function saveSelectedModelKey(modelId) {
-    const model = MODELS.find(m => m.id === modelId);
+    const model  = MODELS.find(m => m.id === modelId);
     if (!model) return;
 
     const input  = document.getElementById('model-key-input');
@@ -123,10 +171,7 @@ function saveSelectedModelKey(modelId) {
         return;
     }
 
-    // Save to localStorage
     localStorage.setItem(model.keyStorageKey, key);
-
-    // Save to Firebase (all models sharing the same dbKey share one Firebase field)
     if (currentUser) {
         db.ref('users/' + currentUser.uid + '/' + model.dbKey).set(key)
           .catch(e => console.error('Could not save key to database:', e));
@@ -135,7 +180,7 @@ function saveSelectedModelKey(modelId) {
     status.textContent = `✓ ${model.name} key saved.`;
     status.className   = 'key-status success';
     status.classList.remove('hidden');
-    renderModelGrid(); // refresh key indicators on the cards
+    renderModelGrid();
 }
 
 // ─── Upload tab — active model badge ──────────────────────────
@@ -152,7 +197,7 @@ function refreshUploadModelBadge() {
         : `<span style="color:var(--wrong)">No key for ${model.name}</span> · <button class="btn-link" onclick="showTab('settings')">Add a key</button>`;
 }
 
-// ─── Gemini onboarding modal (shown on first login) ───────────
+// ─── Gemini onboarding modal ───────────────────────────────────
 
 function persistGeminiKey(key) {
     localStorage.setItem('geminiApiKey', key);
@@ -199,9 +244,19 @@ function initializeQuote() {
         card.className   = 'card feedback-card is-neutral';
     }
 }
-window.addEventListener('load', initializeQuote);
+
+window.addEventListener('load', () => {
+    initializeQuote();
+    renderOperationSelector();
+});
 
 function startPractice() {
+    const selectedOps = getSelectedOps();
+    if (selectedOps.length === 0) {
+        document.getElementById('op-selector-error').classList.remove('hidden');
+        return;
+    }
+
     if (practiceOngoing || correctCount > 0 || incorrectCount > 0) {
         if (!confirm("Starting a new session will reset your progress. Continue?")) return;
     }
@@ -228,42 +283,49 @@ function generateQuestion() {
     const container = document.getElementById('question-container');
     container.innerHTML = '';
 
-    const roll = Math.random();
-    if      (roll < 0.33) generateArithmeticQuestion(container);
-    else if (roll < 0.67) generateMultiplicationQuestion(container);
-    else                  generatePercentageQuestion(container);
+    const selectedIds = getSelectedOps();
+    const available   = OPERATIONS.filter(o => selectedIds.includes(o.id));
+    if (available.length === 0) return;
+
+    const op = available[Math.floor(Math.random() * available.length)];
+    op.fn(container);
+}
+
+// ─── Question generators ───────────────────────────────────────
+
+function generateAdditionQuestion(container) {
+    let a, b;
+    do {
+        a = Math.floor(Math.random() * 90) + 10;
+        b = Math.floor(Math.random() * 90) + 10;
+    } while (a === b);
+    displayQuestion(container, `${a} + ${b} = ?`, a + b);
+}
+
+function generateSubtractionQuestion(container) {
+    let a, b;
+    do {
+        a = Math.floor(Math.random() * 90) + 10;
+        b = Math.floor(Math.random() * 90) + 10;
+    } while (a === b);
+    if (a < b) [a, b] = [b, a];
+    displayQuestion(container, `${a} − ${b} = ?`, a - b);
 }
 
 function generateMultiplicationQuestion(container) {
-    let num1, num2;
-    do {
-        num1 = Math.floor(Math.random() * 800) + 100;
-        num2 = Math.floor(Math.random() * 8) + 2;
-    } while (num1 % 100 === 0);
-    displayQuestion(container, `${num1} × ${num2} = ?`, num1 * num2);
-}
-
-function generateArithmeticQuestion(container) {
-    let num1, num2;
-    do {
-        num1 = Math.floor(Math.random() * 90) + 10;
-        num2 = Math.floor(Math.random() * 90) + 10;
-    } while (num1 === num2);
-
-    const ops = ['+', '-', '×'];
-    const op  = ops[Math.floor(Math.random() * ops.length)];
-    let questionText, answer;
-
-    switch (op) {
-        case '+': questionText = `${num1} + ${num2} = ?`; answer = num1 + num2; break;
-        case '-':
-            if (num1 < num2) [num1, num2] = [num2, num1];
-            questionText = `${num1} - ${num2} = ?`;
-            answer = num1 - num2;
-            break;
-        case '×': questionText = `${num1} × ${num2} = ?`; answer = num1 * num2; break;
+    // Mix: 3-digit × single digit (harder) and 2-digit × 2-digit
+    if (Math.random() < 0.5) {
+        let a, b;
+        do {
+            a = Math.floor(Math.random() * 800) + 100;
+            b = Math.floor(Math.random() * 8) + 2;
+        } while (a % 100 === 0);
+        displayQuestion(container, `${a} × ${b} = ?`, a * b);
+    } else {
+        let a = Math.floor(Math.random() * 9) + 2;  // 2–10
+        let b = Math.floor(Math.random() * 12) + 2; // 2–13
+        displayQuestion(container, `${a} × ${b} = ?`, a * b);
     }
-    displayQuestion(container, questionText, answer);
 }
 
 function generatePercentageQuestion(container) {
@@ -272,7 +334,6 @@ function generatePercentageQuestion(container) {
         denominator = Math.floor(Math.random() * 15) + 2;
         numerator   = Math.floor(Math.random() * (denominator * 2 - 1)) + 1;
     } while (numerator === denominator || numerator > denominator * 2);
-
     const answer = ((numerator / denominator) * 100).toFixed(2);
     displayQuestion(container, `${numerator} / ${denominator} as a percentage?`, answer);
 }

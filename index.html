@@ -72,6 +72,13 @@
                         <input type="number" id="timeInput" min="1" placeholder="5">
                         <span class="unit">minutes</span>
                     </div>
+                    <div class="op-selector-wrap">
+                        <label class="op-selector-label">Question types</label>
+                        <div id="operation-selector" class="operation-selector"></div>
+                        <p id="op-selector-error" class="op-selector-error hidden">
+                            Select at least one question type.
+                        </p>
+                    </div>
                     <div class="button-row">
                         <button class="btn btn-primary" onclick="startPractice()">▶ Start</button>
                         <button class="btn btn-ghost"   onclick="pausePractice()">⏸ Pause</button>

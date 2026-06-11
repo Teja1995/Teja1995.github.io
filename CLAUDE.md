@@ -27,12 +27,14 @@ firebase-config.js  — Firebase project credentials + initialises firebase + db
 - Authenticated state → full app with 4 tabs: Practice, Check Worksheet, My Performance, Settings
 
 ### 2. Practice Tab
-- User sets a duration (minutes) and clicks Start
-- Random math questions appear one at a time; answer submitted with Enter
-- Three question types chosen randomly (~equal probability):
-  - **Arithmetic** — two 2-digit numbers (10–99) with `+`, `-`, or `×`
-  - **Multiplication** — 3-digit number (not multiple of 100) × single digit (2–9)
-  - **Percentage** — convert a fraction to % (2 decimal places)
+- User sets a duration (minutes) and selects one or more question types, then clicks Start
+- Selection persists in localStorage across sessions
+- Random questions from the selected types appear one at a time; answer submitted with Enter
+- Four question types (toggled with chip buttons, at least one must be active):
+  - **Addition** — two 2-digit numbers (10–99), e.g. `47 + 83 = ?`
+  - **Subtraction** — two 2-digit numbers (larger − smaller, no negative results)
+  - **Multiplication** — randomly alternates between 3-digit × single digit (100–899 × 2–9, not a multiple of 100) and simple times-table style (2–10 × 2–13)
+  - **Percentages** — convert a fraction to % rounded to 2 decimal places
 - Live score counters (Correct / Wrong) with bump animation on each answer
 - Timer turns red and pulses at ≤ 30 seconds remaining
 - Pause / Resume supported (timer + answer checking both freeze)

@@ -283,6 +283,59 @@ h1 {
 .time-input-row input[type="number"]::placeholder { color: var(--text-muted); font-weight: 400; }
 .unit { color: var(--text-muted); font-size: 0.875rem; white-space: nowrap; }
 
+/* Operation selector */
+.op-selector-wrap { margin-bottom: 16px; }
+.op-selector-label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+.operation-selector {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.op-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    border-radius: 20px;
+    border: 1.5px solid var(--border);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color 0.18s, background 0.18s, color 0.18s;
+    user-select: none;
+}
+.op-chip:hover {
+    border-color: rgba(99, 102, 241, 0.5);
+    background: rgba(99, 102, 241, 0.07);
+    color: var(--text);
+}
+.op-chip.active {
+    border-color: var(--accent);
+    background: rgba(99, 102, 241, 0.16);
+    color: var(--accent-light);
+}
+.op-symbol {
+    font-size: 1rem;
+    font-weight: 800;
+    line-height: 1;
+}
+.op-selector-error {
+    font-size: 0.8rem;
+    color: var(--wrong);
+    margin-top: 8px;
+}
+
 /* Buttons */
 .button-row { display: flex; gap: 8px; }
 
