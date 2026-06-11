@@ -279,11 +279,15 @@ async function callModel(model, { base64, mimeType }, apiKey) {
 
 // ─── Retry + failover orchestration ───────────────────────────
 
-function isOverloadError(err) {
+function isRateLimitError(err) {
+    const m = err.message.toLowerCase();
+    return m.includes('429') || m.includes('rate limit') || m.includes('too many') || m.includes('quota');
+}
+
+function isTransientError(err) {
     const m = err.message.toLowerCase();
     return m.includes('503') || m.includes('overload') || m.includes('high demand') ||
-           m.includes('unavailable') || m.includes('retry') ||
-           m.includes('rate limit') || m.includes('429') || m.includes('too many');
+           m.includes('unavailable') || m.includes('retry');
 }
 
 const RETRY_DELAYS = [5000, 15000, 30000];
@@ -295,7 +299,10 @@ async function tryModelWithRetries(model, fileData, apiKey) {
             return await callModel(model, fileData, apiKey);
         } catch (err) {
             lastErr = err;
-            if (isOverloadError(err) && i < 2) {
+            // Rate limit = switch immediately, no point retrying same model
+            if (isRateLimitError(err)) throw err;
+            // Transient overload = retry with backoff
+            if (isTransientError(err) && i < 2) {
                 const waitSec = RETRY_DELAYS[i] / 1000;
                 setLoadingMessage(`${model.name} is busy — retrying in ${waitSec}s… (attempt ${i + 1}/3)`);
                 await new Promise(r => setTimeout(r, RETRY_DELAYS[i]));

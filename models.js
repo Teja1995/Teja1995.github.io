@@ -60,11 +60,11 @@ const MODELS = [
     },
     {
         id: 'openrouter-gemini',
-        name: 'Gemini 2.0 Flash',
+        name: 'Gemini 2.5 Flash',
         provider: 'OpenRouter',
         tag: 'No Cost',
         tagClass: 'tag-free',
-        accuracy: 4,
+        accuracy: 5,
         rpmLabel: 'Varies',
         keyStorageKey: 'openrouterApiKey',
         dbKey: 'openrouterKey',
@@ -77,7 +77,7 @@ const MODELS = [
         </svg>`,
         keyUrl: 'https://openrouter.ai/settings/keys',
         keyPlaceholder: 'Paste your OpenRouter API key',
-        keyNote: '✓ OpenRouter is free for select models. One key gives access to multiple AI models.',
+        keyNote: '✓ Same Gemini 2.5 Flash model via OpenRouter — separate quota from AI Studio. One key covers all OpenRouter models.',
         keySteps: [
             { text: 'Go to ', link: { label: 'openrouter.ai/settings/keys', url: 'https://openrouter.ai/settings/keys' } },
             { text: 'Create a free account' },
@@ -86,7 +86,7 @@ const MODELS = [
         ],
         apiFormat: 'openai',
         endpoint: 'https://openrouter.ai/api/v1/chat/completions',
-        modelId: 'google/gemini-2.0-flash-exp:free'
+        modelId: 'google/gemini-2.5-flash:free'
     },
     {
         id: 'openrouter-qwen',
@@ -107,7 +107,7 @@ const MODELS = [
         </svg>`,
         keyUrl: 'https://openrouter.ai/settings/keys',
         keyPlaceholder: 'Paste your OpenRouter API key',
-        keyNote: '✓ Uses the same OpenRouter key as Gemini 2.0 Flash above. Qwen 2.5 VL is a strong vision model from Alibaba.',
+        keyNote: '✓ Uses the same OpenRouter key as Gemini 2.5 Flash above. Qwen 2.5 VL is a strong vision model from Alibaba.',
         keySteps: [
             { text: 'Go to ', link: { label: 'openrouter.ai/settings/keys', url: 'https://openrouter.ai/settings/keys' } },
             { text: 'Create a free account' },

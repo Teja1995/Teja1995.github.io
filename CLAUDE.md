@@ -74,10 +74,12 @@ Models (especially Groq/OpenRouter) frequently return malformed or decorated JSO
 - `console.error` logs the raw model output when all passes fail, for debugging
 
 **Retry + auto-failover logic (upload.js):**
-1. Try the selected model up to 3 times with exponential back-off (5s → 15s → 30s) on overload/503 errors
-2. If still failing after 3 retries, automatically switch to the next model (in accuracy ranking order) that has an API key saved
-3. Repeat until all available models are exhausted, then show an error
-4. Live loading message updates at each step to tell the user what's happening
+- **Rate limit (429):** switch to next model immediately — no retries. Retrying a rate-limited model is pointless (quota resets after 60s).
+- **Transient overload (503, "high demand"):** retry up to 3 times with exponential back-off (5s → 15s → 30s) before switching.
+- After exhausting retries, switch to the next model (in accuracy ranking order) that has a saved key.
+- Repeat until all available models are exhausted, then show an error.
+- Live loading message updates at each step so the user knows what's happening.
+- **Primary failover path:** AI Studio Gemini 2.5 Flash → OpenRouter Gemini 2.5 Flash (same model, separate quota) → Groq/Qwen as last resort.
 
 ### 4. My Performance Tab
 - Line chart (Chart.js): X = session date, Y = questions per minute
@@ -100,15 +102,17 @@ Models (especially Groq/OpenRouter) frequently return malformed or decorated JSO
 
 | # | Model | Provider | Stars | Free RPM | localStorage key | Firebase key |
 |---|---|---|---|---|---|---|
+| # | Model | Provider | Stars | Free RPM | localStorage key | Firebase key |
+|---|---|---|---|---|---|---|
 | 1 | Gemini 2.5 Flash | Google AI Studio | ★★★★★ | 5 RPM | `geminiApiKey` | `geminiKey` |
-| 2 | Gemini 2.0 Flash (free) | OpenRouter | ★★★★ | Varies | `openrouterApiKey` | `openrouterKey` |
+| 2 | Gemini 2.5 Flash (free) | OpenRouter | ★★★★★ | Varies | `openrouterApiKey` | `openrouterKey` |
 | 3 | Llama 4 Scout | Groq | ★★★ | 30 RPM | `groqApiKey` | `groqKey` |
 | 4 | Qwen 2.5 VL 72B (free) | OpenRouter | ★★★ | Varies | `openrouterApiKey` | `openrouterKey` |
 
-Note: Llama 4 Scout accuracy was downgraded from ★★★★ to ★★★ after real-world testing showed inconsistent handwriting recognition, incorrect correctAnswer computation, and intermittent column-skipping.
-
 Notes:
-- OpenRouter models 3 and 4 share the same API key; saving either updates the same Firebase field
+- Models 1 and 2 are the same Gemini 2.5 Flash model via different providers — separate quota pools. When AI Studio hits 5 RPM, auto-failover switches to OpenRouter's copy instantly.
+- OpenRouter models 2 and 4 share the same API key; saving either updates the same Firebase field
+- Llama 4 Scout accuracy is ★★★ after real-world testing showed inconsistent handwriting recognition, wrong correctAnswer values, and intermittent column-skipping
 - Auto-failover skips any model with no saved key
 - The upload tab shows a small badge with the currently selected model name
 
