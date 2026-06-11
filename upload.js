@@ -199,15 +199,14 @@ function parseAIJSON(text, modelName = 'unknown') {
         }
     }
 
-    // 2. Missing studentAnswer value → insert "blank"
-    //    e.g. "studentAnswer","correctAnswer": → "studentAnswer":"blank","correctAnswer":
+    // 2. Missing values for specific known keys (safe — only matches keys, not values,
+    //    because in valid JSON these names are always followed by ':' not ',')
+    //    "studentAnswer","nextKey": → "studentAnswer":"blank","nextKey":
     s = s.replace(/"studentAnswer"\s*,\s*"(\w+)":/g, '"studentAnswer":"blank","$1":');
+    //    "correctAnswer","nextKey": → "correctAnswer":"","nextKey":
+    s = s.replace(/"correctAnswer"\s*,\s*"(\w+)":/g, '"correctAnswer":"","$1":');
 
-    // 3. Other missing key values → insert empty string
-    //    e.g. "correctAnswer","isCorrect": → "correctAnswer":"","isCorrect":
-    s = s.replace(/"(\w+)"\s*,\s*"(\w+)":/g, '"$1":"","$2":');
-
-    // 4. Strip trailing commas (common across all models)
+    // 3. Strip trailing commas (common across all models)
     s = s.replace(/,\s*([}\]])/g, '$1');
 
     // ── Regex extraction ──────────────────────────────────────────────────────
