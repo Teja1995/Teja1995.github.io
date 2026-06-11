@@ -49,11 +49,27 @@ firebase-config.js  — Firebase project credentials + initialises firebase + db
 - Results displayed as a table with ✓ / ✗ per question and a correct/wrong summary
 - Shows which model was used at the bottom of the results
 
-**Worksheet prompt design:** Worksheets typically have 4 columns of problems in `num + num = ____` format. The prompt explicitly instructs the model to:
+**Worksheet prompt design:** Worksheets typically have 4 columns of problems in `num + num = ____` format. The prompt opens with a GOLDEN RULE and explicitly instructs the model to:
+- Act as an answer-**checker**, not an answer-**giver** — never compute and write an answer the student didn't write
+- GOLDEN RULE: if the answer space after `=` is empty, `studentAnswer` must be `"blank"` and `isCorrect` must be `false`, no exceptions
 - Read column by column, left to right, top to bottom within each column
 - Only look at the blank/underscored space immediately after `=` on the same line for the student's answer
 - Never borrow a number from the next question as the current answer
-- Mark unanswered blanks as `studentAnswer: "blank"` rather than guessing
+- If the entire sheet appears unanswered, every `studentAnswer` must be `"blank"` and every `isCorrect` must be `false`
+
+**Client-side blank/unreadable enforcement (`upload.js → displayWorksheetResults`):**
+Before rendering results, the app iterates every row and forces `isCorrect = false` if `studentAnswer` is `"blank"` or `"unreadable"`. This is a safety net in case a model ignores the prompt instruction.
+
+**JSON response parsing (`upload.js → parseAIJSON`):**
+Models (especially Groq/OpenRouter) frequently return malformed or decorated JSON. Five recovery passes are tried in order before giving up:
+1. Direct `JSON.parse` (happy path)
+2. Strip trailing commas before `]` or `}` — most common Groq mistake
+3. Truncate to the last fully-closed `}` — handles responses cut off mid-generation
+4. Convert single-quoted strings to double quotes — some models use JS object syntax
+5. Extract every `{…}` block individually and assemble them into an array — last resort
+- The extraction regex is `\[\s*\{…\}\s*\]` (requires array of objects), not just `\[…\]`, so preamble text like `[note: 4 columns detected]` doesn't poison the match
+- All markdown fences (` ```json `) are stripped before parsing
+- `console.error` logs the raw model output when all passes fail, for debugging
 
 **Retry + auto-failover logic (upload.js):**
 1. Try the selected model up to 3 times with exponential back-off (5s → 15s → 30s) on overload/503 errors
@@ -237,6 +253,10 @@ Apply in: Firebase Console → Realtime Database → Rules → Publish.
 | Model keys stored in Firebase (not only localStorage) | Mobile browsers clear localStorage; Firebase persists keys across devices and browser resets |
 | No format validation on API keys | Prefix checks like `AIza` were rejecting valid keys; wrong keys now fail gracefully at the API with a clear message |
 | CDN compat SDK (not ES modules) | No build step needed; works directly on GitHub Pages |
-| Column-aware Gemini prompt | Generic prompt caused model to read numbers from adjacent rows as answers; explicit spatial layout rules fixed accuracy |
+| Column-aware prompt | Generic prompt caused model to read numbers from adjacent rows as answers; explicit spatial layout rules fixed accuracy |
+| GOLDEN RULE in prompt + client-side enforcement | Models (both Gemini and Groq) were filling in computed answers for blank spaces and marking them correct; opening the prompt with "you are a checker not a giver" + client-side `isCorrect=false` override fixed it |
+| 5-pass JSON recovery | Groq and OpenRouter return trailing commas, single quotes, preamble text, or cut-off arrays; a single `JSON.parse` fails too often; five progressive recovery passes handle all observed failure modes |
+| Extraction regex requires array of objects | Plain `\[[\s\S]*\]` matched `[note: 4 columns]` preambles and poisoned the parse; `\[\s*\{…\}\s*\]` requires the array to contain objects so only the real answer array matches |
 | AI Studio key required for Gemini (not Cloud Console) | Cloud Console keys have 0 free-tier quota for Gemini regardless of model |
 | models.js loaded before auth.js | auth.js iterates MODELS to restore keys; models.js must exist as a global first |
+| Operation selection saved to localStorage | Students often practice the same type each day; persisting the chip selection avoids re-selecting every visit |
