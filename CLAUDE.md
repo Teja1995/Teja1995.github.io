@@ -48,16 +48,18 @@ firebase-config.js  — Firebase project credentials + initialises firebase + db
 - AI returns JSON: `[{question, studentAnswer, correctAnswer, isCorrect}]`
 - Results displayed as a table with ✓ / ✗ per question and a correct/wrong summary
 - Shows which model was used at the bottom of the results
+- **"Automatically try other models" checkbox** (checked by default): when unchecked, only the selected model is attempted with no failover
 
-**Worksheet prompt design:** Worksheets typically have 4 columns of problems in `num + num = ____` format. The prompt is structured as two explicit steps and opens with a GOLDEN RULE:
-- Act as an answer-**checker**, not an answer-**giver** — never compute and write an answer the student didn't write
-- GOLDEN RULE: if the answer space after `=` is empty, `studentAnswer` must be `"blank"` and `isCorrect` must be `false`, no exceptions
-- **Step 1 — Scan the full image first:** before reading anything, look at the entire image left-to-right, count all columns (typically 4), and commit to processing every one. The prompt explicitly warns: "if you find yourself returning fewer than 15 results for a full page, you have missed columns — look again at the right side of the image." This was added because Llama 4 Scout would read only the first column and stop.
-- **Step 2 — Read each column:** left to right across columns, top to bottom within each column
-- Only look at the blank/underscored space immediately after `=` on the same line for the student's answer
-- Never borrow a number from the next question as the current answer
-- Every problem visible on the sheet must appear in the output array
-- If the entire sheet appears unanswered, every `studentAnswer` must be `"blank"` and every `isCorrect` must be `false`
+**Worksheet prompt design (`upload.js → WORKSHEET_PROMPT`):**
+The prompt is a 7-step structured instruction. The model's only job is to read handwriting — it never computes answers. `correctAnswer` and `isCorrect` are always returned as `""` and `false`; the app fills them in client-side.
+
+- **Step 1 — Orientation:** mentally straighten a tilted or rotated photo before reading anything
+- **Step 2 — Count every `=` sign:** scan the full image and count all printed `=` signs before reading any answers. Each `=` is exactly one problem. The output array must contain exactly this many items. This forces the model to acknowledge the full image including rightmost columns before it starts.
+- **Step 3 — Identify columns:** treat each column as a vertical newspaper strip; identify all column boundaries before reading
+- **Step 4 — Read one complete column at a time:** finish the entire column top-to-bottom before moving right. Never scan horizontally across the page.
+- **Step 5 — Use the `=` sign as a horizontal anchor:** for each line, find the printed `=` sign, read left at the exact same horizontal level for the question, and right for the student's answer. Both operands must be on the same horizontal level as the `=`. This was added to stop Gemini borrowing the second operand from the line above (e.g. reading `3 + 2` instead of `3 + 4` when `2` appeared on the preceding line).
+- **Step 6 — Transcribe the student's answer:** faint pencil marks count; empty blank → `"blank"`; unreadable marks → `"unreadable"`
+- **Step 7 — Self-verify:** count output array items; if fewer than the Step 2 count, find the missing problems and add them before returning
 
 **Client-side math verification (`upload.js → verifyMath`):**
 Before rendering, `verifyMath(results)` runs over every row. It calls `computeAnswer(questionStr)` which parses the question string and computes the correct answer in JavaScript (handles `+`, `−`, `×`, and fraction-as-percentage). The computed value overwrites `r.correctAnswer` and `r.isCorrect` is re-evaluated with 0.01 tolerance. This means AI math errors can never affect the final verdict — models only need to read handwriting, all arithmetic is done client-side.
@@ -82,6 +84,7 @@ Models (especially Groq/OpenRouter) frequently return malformed or decorated JSO
 - After exhausting retries, switch to the next model (in accuracy ranking order) that has a saved key.
 - Repeat until all available models are exhausted, then show an error.
 - Live loading message updates at each step so the user knows what's happening.
+- **Auto-retry checkbox** controls whether failover happens at all; when unchecked the loop runs for only the selected model.
 - **Primary failover path:** AI Studio Gemini 2.5 Flash → OpenRouter Gemini 2.5 Flash (same model, separate quota) → Groq/Qwen as last resort.
 
 ### 4. My Performance Tab
@@ -146,7 +149,8 @@ No npm, no bundler, no build step.
 **Gemini format** (`models.js`: `apiFormat: 'gemini'`):
 ```
 POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=KEY
-Body: { contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type, data: base64 } }] }] }
+Body: { contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type, data: base64 } }] }],
+        generationConfig: { temperature: 0, maxOutputTokens: 8192 } }
 Response: candidates[0].content.parts[0].text
 ```
 
@@ -155,7 +159,8 @@ Response: candidates[0].content.parts[0].text
 POST https://api.groq.com/openai/v1/chat/completions  (or openrouter.ai/api/v1/...)
 Headers: Authorization: Bearer KEY
          HTTP-Referer + X-Title (OpenRouter only, per their usage policy)
-Body: { model: modelId, messages: [{ role: user, content: [{ type: text }, { type: image_url, image_url: { url: data:mimeType;base64,... } }] }] }
+Body: { model: modelId, temperature: 0, max_tokens: 8192,
+        messages: [{ role: user, content: [{ type: text }, { type: image_url, image_url: { url: data:mimeType;base64,... } }] }] }
 Response: choices[0].message.content
 ```
 
@@ -290,3 +295,8 @@ Apply in: Firebase Console → Realtime Database → Rules → Publish.
 | Operation selection saved to localStorage | Students often practice the same type each day; persisting the chip selection avoids re-selecting every visit |
 | Client-side math verification (`computeAnswer` + `verifyMath` in upload.js) | AI models — especially Llama 4 Scout — miscalculate correct answers and flag answers wrong even when the student is right; computing the correct answer in JS eliminates this entirely. Models now only need to read handwriting; we do the math. |
 | Llama 4 Scout accuracy downgraded to ★★★ | Real-world testing showed inconsistent handwriting recognition, wrong correctAnswer values, and intermittent column-skipping — not consistent with ★★★★ performance |
+| Model prompt returns `correctAnswer: ""` and `isCorrect: false` always | Asking the model to compute correct answers introduced errors (especially Llama); now the model only reads handwriting and the app computes everything. Simplifying the model's job also makes JSON output more reliable. |
+| `=` sign used as horizontal anchor in prompt | Gemini was reading the first operand from the current line but picking the second operand from the line above (e.g. "3 + 2" instead of "3 + 4"). Instructing the model to read both operands at the same horizontal level as the printed `=` sign fixed cross-line borrowing. |
+| Count `=` signs before reading (Step 2) + self-verify after (Step 7) | Model was skipping columns and returning inconsistent counts on repeated runs. Counting all `=` signs first forces the model to acknowledge the full image; the self-verify step catches early exits before the response is returned. |
+| Temperature = 0 on all API calls | Temperature 0.1 caused different results on identical images. Setting to 0 makes output fully deterministic — the same image always produces the same response from the same model. |
+| Auto-retry checkbox (checked by default) | Users wanted to control whether the app silently switches models. Checkbox unchecked = selected model only, no failover; checkbox checked = current behaviour. |
