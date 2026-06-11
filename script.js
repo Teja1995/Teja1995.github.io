@@ -38,6 +38,15 @@ function closeModal(id) {
 
 // ─── Settings ──────────────────────────────────────────────────
 
+function persistGeminiKey(key) {
+    localStorage.setItem('geminiApiKey', key);
+    // Also save to Firebase so it survives browser clears and works across devices
+    if (currentUser) {
+        db.ref('users/' + currentUser.uid + '/geminiKey').set(key)
+            .catch(e => console.error('Could not save key to database:', e));
+    }
+}
+
 function saveGeminiKey() {
     const key = document.getElementById('gemini-key').value.trim();
     const status = document.getElementById('key-status');
@@ -49,7 +58,7 @@ function saveGeminiKey() {
         return;
     }
 
-    localStorage.setItem('geminiApiKey', key);
+    persistGeminiKey(key);
     status.textContent = '✓ API key saved successfully.';
     status.className = 'key-status success';
     status.classList.remove('hidden');
@@ -62,9 +71,8 @@ function saveGeminiKeyFromOnboarding() {
         document.getElementById('onboarding-error').classList.remove('hidden');
         return;
     }
-    localStorage.setItem('geminiApiKey', key);
+    persistGeminiKey(key);
     closeModal('gemini-onboarding-modal');
-    // Sync to settings input in case user navigates there
     const settingsInput = document.getElementById('gemini-key');
     if (settingsInput) settingsInput.value = key;
     refreshSettingsTab();
