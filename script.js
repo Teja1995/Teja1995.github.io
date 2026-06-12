@@ -1,4 +1,4 @@
-const APP_VERSION = '2026-06-12 · 1a2d1ce';
+const APP_VERSION = '2026-06-12 · ff56590';
 
 let time, timer;
 let correctCount = 0;
