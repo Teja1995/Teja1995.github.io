@@ -7,7 +7,8 @@
        msedge --headless=new --virtual-time-budget=15000 --dump-dom test-imaging.html
 
      Query params: ?skew=3 (tilt degrees), ?rot=180 (flip), ?photo=1 (adds desk
-     background + off-centre page like a phone photo). -->
+     background + off-centre page like a phone photo), ?faint=1 (thin pale
+     answer underlines that vanish at analysis scale — the blank-sheet case). -->
 <html>
 <head><meta charset="UTF-8"><title>imaging test</title></head>
 <body>
@@ -15,7 +16,7 @@
 <div id="thumbs"></div>
 <script src="imaging.js"></script>
 <script>
-function drawSheet() {
+function drawSheet(faint) {
     const c = document.createElement('canvas');
     c.width = 1088; c.height = 1408;
     const x = c.getContext('2d');
@@ -44,7 +45,13 @@ function drawSheet() {
             const a = 10 + ((col * 48 + r) * 7) % 90;
             const b = 10 + ((col * 48 + r) * 13) % 90;
             x.fillText(`${a} + ${b} =`, colX[col], y);
-            x.fillRect(colX[col] + 92, y + 3, 82, 2); // printed answer underline
+            if (faint) {
+                x.globalAlpha = 0.3;                       // pale 1px underline —
+                x.fillRect(colX[col] + 92, y + 3, 82, 1);  // vanishes at analysis scale
+                x.globalAlpha = 1;
+            } else {
+                x.fillRect(colX[col] + 92, y + 3, 82, 2);  // printed answer underline
+            }
         }
     }
     return c;
@@ -65,7 +72,7 @@ function photoify(sheet) {
     const out = document.getElementById('out');
     try {
         const params = new URLSearchParams(location.search);
-        let sheet = drawSheet();
+        let sheet = drawSheet(!!params.get('faint'));
         if (params.get('photo')) sheet = photoify(sheet);
         const skew = parseFloat(params.get('skew') || '0');
         const rot  = parseFloat(params.get('rot') || '0');

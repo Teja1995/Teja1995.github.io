@@ -984,11 +984,11 @@ h1 {
 .split-preview-row {
     display: flex;
     gap: 8px;
+    align-items: flex-start; /* never stretch — stretching distorts aspect ratio */
 }
 .split-preview-row img {
-    flex: 1;
-    min-width: 0;
-    max-width: 24%;
+    width: 24%;
+    height: auto; /* preserve the crop's true proportions */
     border: 1px solid var(--border);
     border-radius: 8px;
 }

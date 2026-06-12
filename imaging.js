@@ -10,7 +10,7 @@
 //   7. crop         — one JPEG per column + small previews for the UI
 // Any failure falls back to a single enhanced full image.
 
-const MAX_LONG_SIDE   = 2600;  // downscale huge phone photos
+const MAX_LONG_SIDE   = 3200;  // downscale huge phone photos (kept high: column crops need legible handwriting)
 const ANALYSIS_WIDTH  = 520;   // small copy used for geometry analysis
 const COLUMN_COUNT    = 4;
 const CONTRAST        = 1.4;
@@ -77,7 +77,7 @@ function rotateCanvas(canvas, deg) {
 }
 
 function thumbnail(canvas) {
-    return scaledCopy(canvas, 200).toDataURL('image/jpeg', 0.7);
+    return scaledCopy(canvas, 260).toDataURL('image/jpeg', 0.75);
 }
 
 const firstIdx = (arr, pred) => { for (let i = 0; i < arr.length; i++) if (pred(arr[i])) return i; return -1; };
@@ -285,14 +285,45 @@ function columnCuts(mask, w, h, page) {
 
     const tw = tx1 - tx0;
     const cuts = [tx0];
+    // Low-ink threshold relative to the busiest part of the profile.
+    let maxSmooth = 0;
+    for (let x = tx0; x <= tx1; x++) if (smooth[x] > maxSmooth) maxSmooth = smooth[x];
+    const lowThr = Math.max(1, maxSmooth * 0.05);
+
     for (let k = 1; k < COLUMN_COUNT; k++) {
         const center = tx0 + Math.round(tw * k / COLUMN_COUNT);
-        const winPx = Math.round(tw * 0.10);
-        let bestX = center, bestVal = Infinity;
-        for (let x = Math.max(tx0 + 1, center - winPx); x <= Math.min(tx1 - 1, center + winPx); x++) {
-            if (smooth[x] < bestVal) { bestVal = smooth[x]; bestX = x; }
+        const winPx = Math.round(tw * 0.12);
+        const lo = Math.max(tx0 + 1, center - winPx);
+        const hi = Math.min(tx1 - 1, center + winPx);
+
+        // Find the longest low-ink run in the window and cut at its RIGHT end,
+        // i.e. just before the next column's first digit. Why not the deepest
+        // valley: on BLANK sheets the printed answer underlines are too faint
+        // to register at analysis scale, so the "empty" zone starts right
+        // after the printed "=" — a min/argmin cut would slice the underline
+        // away from its own question. The right end of the run is correct in
+        // both cases (underline visible or not).
+        let bestStart = -1, bestEnd = -1, runStart = -1;
+        for (let x = lo; x <= hi + 1; x++) {
+            const isLow = x <= hi && smooth[x] <= lowThr;
+            if (isLow && runStart === -1) runStart = x;
+            if (!isLow && runStart !== -1) {
+                if (x - 1 - runStart > bestEnd - bestStart) { bestStart = runStart; bestEnd = x - 1; }
+                runStart = -1;
+            }
         }
-        cuts.push(bestX);
+        let cut;
+        if (bestStart !== -1) {
+            cut = Math.max(lo, bestEnd - 2);
+        } else {
+            // No clearly empty zone — fall back to the plain minimum.
+            let bestVal = Infinity;
+            cut = center;
+            for (let x = lo; x <= hi; x++) {
+                if (smooth[x] < bestVal) { bestVal = smooth[x]; cut = x; }
+            }
+        }
+        cuts.push(cut);
     }
     cuts.push(tx1);
 
@@ -364,19 +395,28 @@ async function prepareColumnImages(fileData) {
         if (!layout) throw new Error('table or columns not found (see __imagingDebug)');
 
         const scale = full.width / a.w;
-        const padX = Math.round(full.width * 0.01);
+        // Interior cuts sit just before the next column's first digit, so the
+        // source pad must stay tiny or neighbouring digit slivers bleed in.
+        // A white MARGIN is added around each crop instead — models misread
+        // characters that touch the image edge.
+        const padOuter = Math.round(full.width * 0.01);
+        const padIn  = 4;
+        const MARGIN = 14;
         const padY = Math.round(full.height * 0.01);
         const yTop = Math.max(0, Math.round(layout.t * scale) - padY);
         const yH = Math.min(full.height - yTop, Math.round((layout.b - layout.t) * scale) + 2 * padY);
 
         const parts = [], previews = [];
         for (let k = 0; k < COLUMN_COUNT; k++) {
-            const xa = Math.max(0, Math.round(layout.cuts[k] * scale) - padX);
-            const xb = Math.min(full.width, Math.round(layout.cuts[k + 1] * scale) + padX);
+            const xa = Math.max(0, Math.round(layout.cuts[k] * scale) - (k === 0 ? padOuter : padIn));
+            const xb = Math.min(full.width, Math.round(layout.cuts[k + 1] * scale) + (k === COLUMN_COUNT - 1 ? padOuter : padIn));
             const c = document.createElement('canvas');
-            c.width = xb - xa;
-            c.height = yH;
-            c.getContext('2d').drawImage(full, xa, yTop, xb - xa, yH, 0, 0, xb - xa, yH);
+            c.width  = (xb - xa) + MARGIN * 2;
+            c.height = yH + MARGIN * 2;
+            const cx = c.getContext('2d');
+            cx.fillStyle = '#fff';
+            cx.fillRect(0, 0, c.width, c.height);
+            cx.drawImage(full, xa, yTop, xb - xa, yH, MARGIN, MARGIN, xb - xa, yH);
             parts.push({ base64: c.toDataURL('image/jpeg', 0.92).split(',')[1], mimeType: 'image/jpeg' });
             previews.push(thumbnail(c));
         }
