@@ -166,6 +166,16 @@ Return ONLY a JSON array, nothing else — no markdown, no commentary. Use the e
  {"question":"72 − 19","studentAnswer":"blank","correctAnswer":"","isCorrect":false}]
 Always set "correctAnswer" to "" and "isCorrect" to false — the app fills these in itself.`;
 
+// Reads the handwritten Date / Time in Sec fields from the header strip.
+// Non-critical: any failure just leaves the save panel fields empty.
+const HEADER_PROMPT =
+`You are reading the HEADER of a student's math worksheet. The printed labels are "Date :" (top left) and "Time in Sec:" (top right). The student may have handwritten values after them. There may also be "Name:" and "NoM:" labels — ignore those.
+
+Return ONLY this JSON object, nothing else — no markdown, no commentary:
+{"date":"<what is handwritten after Date, copied exactly>","timeSeconds":"<the number handwritten after Time in Sec>"}
+
+If a field has no handwriting, use "blank". Copy handwriting exactly as written — NEVER guess or invent a value.`;
+
 // ─── Per-format API callers ────────────────────────────────────
 
 const DEFAULT_MAX_TOKENS = 8192; // safe fallback; per-model limit set in models.js
@@ -194,7 +204,7 @@ async function callGeminiAPI(model, base64, mimeType, apiKey, prompt) {
         }],
         generationConfig: { temperature: 0, maxOutputTokens: model.maxTokens || DEFAULT_MAX_TOKENS }
     });
-    return parseAIJSON(data.candidates?.[0]?.content?.parts?.[0]?.text || '', model.name);
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
 async function callOpenAICompatAPI(model, base64, mimeType, apiKey, prompt) {
@@ -210,7 +220,14 @@ async function callOpenAICompatAPI(model, base64, mimeType, apiKey, prompt) {
         temperature: 0,
         max_tokens: model.maxTokens || DEFAULT_MAX_TOKENS
     });
-    return parseAIJSON(data.choices?.[0]?.message?.content || '', model.name);
+    return data.choices?.[0]?.message?.content || '';
+}
+
+// Raw model text for a single image+prompt (no answer-array parsing).
+function callModelRaw(model, { base64, mimeType }, apiKey, prompt) {
+    return model.apiFormat === 'gemini'
+        ? callGeminiAPI(model, base64, mimeType, apiKey, prompt)
+        : callOpenAICompatAPI(model, base64, mimeType, apiKey, prompt);
 }
 
 // ─── Parse error logger ────────────────────────────────────────
@@ -312,12 +329,40 @@ function parseAIJSON(text, modelName = 'unknown') {
     throw new Error('The AI returned a response this app could not read. Please try again or switch models in Settings.');
 }
 
-async function callModel(model, { base64, mimeType }, apiKey, prompt) {
-    if (model.apiFormat === 'gemini') {
-        return callGeminiAPI(model, base64, mimeType, apiKey, prompt);
-    } else {
-        return callOpenAICompatAPI(model, base64, mimeType, apiKey, prompt);
+async function callModel(model, fileData, apiKey, prompt) {
+    return parseAIJSON(await callModelRaw(model, fileData, apiKey, prompt), model.name);
+}
+
+// Parse the header response: a single {date, timeSeconds} object, not an
+// array. Returns null on any failure — the caller treats that as "couldn't
+// read the header" and the student fills the fields in manually.
+function parseHeaderJSON(text) {
+    try {
+        const s = String(text).replace(/```[a-z]*\n?/gi, '').replace(/```/g, '');
+        const m = s.match(/\{[^{}]*\}/);
+        if (!m) return null;
+        const o = JSON.parse(m[0].replace(/,\s*\}/g, '}'));
+        return { date: String(o.date ?? ''), timeSeconds: String(o.timeSeconds ?? '') };
+    } catch {
+        return null;
     }
+}
+
+// One attempt per available model, no retries: header reading is a bonus,
+// never worth delaying or failing the main results for.
+async function readHeaderFields(queue, headerPart) {
+    for (const model of queue) {
+        try {
+            setLoadingMessage(`Reading date & time from the header with ${model.name}…`);
+            const raw = await callModelRaw(model, headerPart,
+                localStorage.getItem(model.keyStorageKey), HEADER_PROMPT);
+            const header = parseHeaderJSON(raw);
+            if (header) return header;
+        } catch (e) {
+            console.warn('[worksheet] header read failed on', model.name, e.message);
+        }
+    }
+    return null;
 }
 
 // ─── Retry + failover orchestration ───────────────────────────
@@ -464,9 +509,13 @@ async function checkWorksheet() {
             modelsUsed.add(model.name);
         }
 
+        // Bonus 5th call: read the handwritten Date / Time in Sec header
+        // fields so the save panel can be pre-filled. Failure is fine.
+        const header = prep.headerPart ? await readHeaderFields(queue, prep.headerPart) : null;
+
         const cols = images.length;
         const labelText = [...modelsUsed].join(', ') + (cols > 1 ? ` · ${cols} columns` : '');
-        displayWorksheetResults(allResults, labelText, prep, colCounts);
+        displayWorksheetResults(allResults, labelText, prep, colCounts, header);
     } catch (err) {
         alert('Could not check worksheet: ' + (err?.message || 'Unknown error'));
     } finally {
@@ -581,8 +630,21 @@ function renderAnnotatedSheet(prep, results, colCounts) {
     box.classList.remove('hidden');
 }
 
-function displayWorksheetResults(results, labelText, prep, colCounts) {
-    results = verifyMath(results);
+// State of the last check, kept so the student can correct AI verdicts and
+// save the (corrected) score to My Performance.
+let lastCheck = null;   // { results, labelText, prep, colCounts }
+
+function displayWorksheetResults(results, labelText, prep, colCounts, header) {
+    lastCheck = { results: verifyMath(results), labelText, prep, colCounts };
+    renderResults();
+    initSavePanel(header);
+    document.getElementById('upload-results').classList.remove('hidden');
+}
+
+// Re-render the table, counts, annotated image and save panel from lastCheck.
+// Called after every student correction.
+function renderResults() {
+    const { results, labelText, prep, colCounts } = lastCheck;
     renderAnnotatedSheet(prep, results, colCounts);
 
     const tbody = document.getElementById('results-tbody');
@@ -595,9 +657,13 @@ function displayWorksheetResults(results, labelText, prep, colCounts) {
         tr.innerHTML = `
             <td>${i + 1}</td>
             <td>${esc(r.question)}</td>
-            <td>${esc(String(r.studentAnswer))}</td>
+            <td><input class="answer-input" value="${esc(String(r.studentAnswer))}"
+                       onchange="editStudentAnswer(${i}, this.value)"
+                       aria-label="Student answer for question ${i + 1}"></td>
             <td>${esc(String(r.correctAnswer))}</td>
-            <td class="${r.isCorrect ? 'result-correct' : 'result-wrong'}">${r.isCorrect ? '✓' : '✗'}</td>
+            <td><button class="verdict-btn ${r.isCorrect ? 'result-correct' : 'result-wrong'}"
+                        onclick="toggleVerdict(${i})"
+                        title="Tap to overwrite the AI's verdict">${r.isCorrect ? '✓' : '✗'}</button></td>
         `;
         tbody.appendChild(tr);
     });
@@ -608,15 +674,108 @@ function displayWorksheetResults(results, labelText, prep, colCounts) {
 
     const modelLabel = document.getElementById('results-model-label');
     if (modelLabel) {
-        modelLabel.textContent = `${total} questions detected` + (labelText ? ` · ${labelText}` : '');
+        modelLabel.textContent = `${total} questions detected` + (labelText ? ` · ${labelText}` : '') +
+            ' — answers and ✓/✗ can be corrected before saving';
     }
 
-    document.getElementById('upload-results').classList.remove('hidden');
+    updateSaveScoreLine();
+}
+
+// Student corrected what the AI read: re-verify that row with our own math.
+function editStudentAnswer(i, value) {
+    const r = lastCheck.results[i];
+    r.studentAnswer = value.trim() === '' ? 'blank' : value.trim();
+    lastCheck.results[i] = verifyMath([r])[0];
+    renderResults();
+}
+
+// Final manual override of a single verdict.
+function toggleVerdict(i) {
+    lastCheck.results[i].isCorrect = !lastCheck.results[i].isCorrect;
+    renderResults();
+}
+
+// ─── "Add to My Performance" panel ─────────────────────────────
+// Nothing is saved automatically: the student reviews the date/time read
+// from the sheet, fixes any wrong verdicts above, then taps Save.
+
+// "12/6/26", "12-06-2026", "12.6.2026" → "2026-06-12"; null if unparseable.
+function parseSheetDate(s) {
+    const m = String(s || '').match(/(\d{1,2})\s*[./\-]\s*(\d{1,2})\s*[./\-]\s*(\d{2,4})/);
+    if (!m) return null;
+    const d = +m[1], mo = +m[2];
+    const y = m[3].length === 2 ? 2000 + +m[3] : +m[3];
+    const dt = new Date(y, mo - 1, d);
+    if (isNaN(dt) || dt.getDate() !== d || dt.getMonth() !== mo - 1 || y < 2000 || y > 2100) return null;
+    return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+function initSavePanel(header) {
+    const dateEl = document.getElementById('ws-date');
+    const secEl  = document.getElementById('ws-seconds');
+    const btn    = document.getElementById('ws-save-btn');
+    const status = document.getElementById('ws-save-status');
+    if (!dateEl) return;
+
+    dateEl.value = parseSheetDate(header?.date) || new Date().toISOString().split('T')[0];
+    const secMatch = String(header?.timeSeconds ?? '').match(/\d+/);
+    secEl.value = secMatch ? secMatch[0] : '';
+
+    btn.disabled = false;
+    btn.textContent = 'Add to My Performance';
+    status.classList.add('hidden');
+    updateSaveScoreLine();
+}
+
+function updateSaveScoreLine() {
+    const line = document.getElementById('ws-score-line');
+    if (!line || !lastCheck) return;
+    const rs = lastCheck.results;
+    const correct = rs.filter(r => r.isCorrect).length;
+    line.textContent = `Will save: ${correct} correct · ${rs.length - correct} wrong · ${rs.length} questions`;
+}
+
+async function saveWorksheetToPerformance() {
+    if (!lastCheck) return;
+    const dateStr = document.getElementById('ws-date').value;
+    const seconds = parseInt(document.getElementById('ws-seconds').value);
+    if (!dateStr || !seconds || seconds <= 0) {
+        alert('Please enter the worksheet date and the time taken in seconds.');
+        return;
+    }
+
+    const rs = lastCheck.results;
+    const correct = rs.filter(r => r.isCorrect).length;
+    const totalQ  = rs.length;
+    const minutes = seconds / 60;
+
+    const btn = document.getElementById('ws-save-btn');
+    btn.disabled = true;
+    try {
+        await saveSession({
+            date:        new Date(dateStr).toISOString(),
+            source:      'worksheet',
+            timeSeconds: seconds,
+            durationMin: parseFloat(minutes.toFixed(2)),
+            correct,
+            incorrect:   totalQ - correct,
+            totalQ,
+            qPerMin:     parseFloat((totalQ / minutes).toFixed(2))
+        });
+        btn.textContent = 'Saved ✓';
+        const status = document.getElementById('ws-save-status');
+        status.textContent = 'Saved — see the My Performance tab.';
+        status.classList.remove('hidden');
+    } catch (err) {
+        btn.disabled = false;
+        alert('Could not save: ' + err.message);
+    }
 }
 
 function esc(str) {
     return String(str)
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 }

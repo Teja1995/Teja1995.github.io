@@ -190,6 +190,27 @@
                                 <tbody id="results-tbody"></tbody>
                             </table>
                         </div>
+
+                        <div id="save-performance" class="save-performance">
+                            <h4 class="save-perf-title">Add this worksheet to My Performance</h4>
+                            <p class="save-perf-desc">
+                                Check the date and time read from the sheet (correct them if needed),
+                                fix any wrongly flagged answers in the table above, then save.
+                            </p>
+                            <div class="save-perf-fields">
+                                <label class="save-perf-field">Worksheet date
+                                    <input type="date" id="ws-date" class="settings-input">
+                                </label>
+                                <label class="save-perf-field">Time taken (seconds)
+                                    <input type="number" id="ws-seconds" class="settings-input" min="1" placeholder="e.g. 300">
+                                </label>
+                            </div>
+                            <p class="save-perf-score" id="ws-score-line"></p>
+                            <button class="btn btn-primary" id="ws-save-btn" onclick="saveWorksheetToPerformance()">
+                                Add to My Performance
+                            </button>
+                            <p id="ws-save-status" class="save-perf-status hidden"></p>
+                        </div>
                     </div>
                 </div>
 
@@ -220,6 +241,7 @@
                             <thead>
                                 <tr>
                                     <th>Date</th>
+                                    <th>Type</th>
                                     <th>Duration</th>
                                     <th>Correct</th>
                                     <th>Wrong</th>
@@ -229,7 +251,7 @@
                             </thead>
                             <tbody id="history-tbody">
                                 <tr>
-                                    <td colspan="6" class="empty-row">
+                                    <td colspan="7" class="empty-row">
                                         No sessions yet. Complete a practice session to see history.
                                     </td>
                                 </tr>
@@ -307,13 +329,20 @@
     <!-- Add session manually -->
     <div id="add-session-modal" class="modal-overlay hidden">
         <div class="modal card">
-            <h3 class="modal-title">Add Practice Session</h3>
+            <h3 class="modal-title">Add Session</h3>
+            <div class="modal-field">
+                <label for="ms-type">Session type</label>
+                <select id="ms-type" class="settings-input" onchange="onManualTypeChange()">
+                    <option value="practice">Website practice</option>
+                    <option value="worksheet">Paper worksheet</option>
+                </select>
+            </div>
             <div class="modal-field">
                 <label for="ms-date">Date</label>
                 <input type="date" id="ms-date" class="settings-input">
             </div>
             <div class="modal-field">
-                <label for="ms-duration">Duration (minutes)</label>
+                <label for="ms-duration" id="ms-duration-label">Duration (minutes)</label>
                 <input type="number" id="ms-duration" class="settings-input" min="1" placeholder="5">
             </div>
             <div class="modal-field">

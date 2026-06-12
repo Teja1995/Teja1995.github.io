@@ -31,6 +31,10 @@ function drawSheet(faint) {
     x.fillText('Name:____________________', 90, 78);
     x.fillText('Time in Sec:________', 830, 52);
     x.fillText('NoM:________', 870, 78);
+    // "handwritten" date and time the header strip should capture
+    x.font = 'italic 18px Georgia';
+    x.fillText('12/6/26', 145, 50);
+    x.fillText('300', 925, 50);
 
     // table border + title
     x.strokeStyle = '#000'; x.lineWidth = 1.5;
@@ -107,12 +111,29 @@ function photoify(sheet) {
             annotated = t ? t.textContent : 'NO BOXES DRAWN';
         }
 
+        // Date parser sanity (upload.js)
+        const dateTests =
+            (parseSheetDate('12/6/26') === '2026-06-12') &&
+            (parseSheetDate('12-06-2026') === '2026-06-12') &&
+            (parseSheetDate('1.2.26') === '2026-02-01') &&
+            (parseSheetDate('blank') === null) &&
+            (parseSheetDate('32/13/26') === null);
+
         out.textContent =
             'RESULT split=' + prep.split +
             ' parts=' + prep.parts.length +
+            ' header=' + !!prep.headerPart +
+            ' dates=' + (dateTests ? 'ok' : 'FAIL') +
             (prep.reason ? ' reason=' + prep.reason : '') +
             '\nANNOTATED ' + annotated +
             '\nDEBUG ' + JSON.stringify(window.__imagingDebug, null, 1);
+
+        if (prep.headerPart) {
+            const hi = new Image();
+            hi.src = 'data:image/jpeg;base64,' + prep.headerPart.base64;
+            hi.style.width = '500px';
+            document.getElementById('thumbs').appendChild(hi);
+        }
 
         for (const u of prep.previews) {
             const im = new Image(); im.src = u; im.style.width = '120px';

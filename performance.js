@@ -45,30 +45,47 @@ function renderChart(sessions) {
     const labels = sessions.map(s =>
         new Date(s.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
     );
-    const dataPoints = sessions.map(s => s.qPerMin || 0);
+
+    // One combined chart, two lines: website practice vs paper worksheets.
+    // Clicking a legend entry hides/shows that line (built into Chart.js),
+    // which is how the student views either type separately.
+    const isWs = s => s.source === 'worksheet';
+    const lineStyle = { pointRadius: 5, pointHoverRadius: 8, fill: true, tension: 0.35, spanGaps: true };
+    const datasets = [];
+    if (sessions.some(s => !isWs(s))) {
+        datasets.push({
+            label: 'Practice (website)',
+            data: sessions.map(s => isWs(s) ? null : (s.qPerMin || 0)),
+            borderColor: '#6366f1',
+            backgroundColor: 'rgba(99,102,241,0.1)',
+            pointBackgroundColor: '#6366f1',
+            pointBorderColor: '#6366f1',
+            ...lineStyle
+        });
+    }
+    if (sessions.some(isWs)) {
+        datasets.push({
+            label: 'Worksheets (paper)',
+            data: sessions.map(s => isWs(s) ? (s.qPerMin || 0) : null),
+            borderColor: '#f59e0b',
+            backgroundColor: 'rgba(245,158,11,0.1)',
+            pointBackgroundColor: '#f59e0b',
+            pointBorderColor: '#f59e0b',
+            ...lineStyle
+        });
+    }
 
     performanceChart = new Chart(canvas, {
         type: 'line',
-        data: {
-            labels,
-            datasets: [{
-                label: 'Questions per minute',
-                data: dataPoints,
-                borderColor: '#6366f1',
-                backgroundColor: 'rgba(99,102,241,0.1)',
-                pointBackgroundColor: '#6366f1',
-                pointBorderColor: '#6366f1',
-                pointRadius: 5,
-                pointHoverRadius: 8,
-                fill: true,
-                tension: 0.35
-            }]
-        },
+        data: { labels, datasets },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { display: false },
+                legend: {
+                    display: datasets.length > 1,
+                    labels: { color: '#94a3b8', usePointStyle: true, pointStyle: 'circle' }
+                },
                 tooltip: {
                     callbacks: {
                         afterBody(items) {
@@ -76,7 +93,8 @@ function renderChart(sessions) {
                             return [
                                 `Correct: ${s.correct}`,
                                 `Wrong: ${s.incorrect}`,
-                                `Duration: ${s.durationMin} min`
+                                isWs(s) ? `Time: ${s.timeSeconds} s (paper worksheet)`
+                                        : `Duration: ${s.durationMin} min`
                             ];
                         }
                     }
@@ -104,7 +122,7 @@ function renderHistoryTable(sessions) {
     tbody.innerHTML = '';
 
     if (sessions.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="empty-row">No sessions yet. Complete a practice session to see history.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-row">No sessions yet. Complete a practice session to see history.</td></tr>';
         return;
     }
 
@@ -114,9 +132,11 @@ function renderHistoryTable(sessions) {
         const date = new Date(s.date).toLocaleDateString('en-GB', {
             day: 'numeric', month: 'short', year: 'numeric'
         });
+        const ws = s.source === 'worksheet';
         tr.innerHTML = `
             <td>${date}</td>
-            <td>${s.durationMin} min</td>
+            <td><span class="type-badge ${ws ? 'type-worksheet' : 'type-practice'}">${ws ? '📄 Worksheet' : '🖥 Practice'}</span></td>
+            <td>${ws && s.timeSeconds ? `${s.timeSeconds} s` : `${s.durationMin} min`}</td>
             <td class="cell-correct">${s.correct}</td>
             <td class="cell-wrong">${s.incorrect}</td>
             <td>${(s.qPerMin || 0).toFixed(1)}</td>
@@ -142,6 +162,8 @@ async function saveSession(sessionData) {
 // ─── Add session manually ──────────────────────────────────────
 
 function showAddSessionModal() {
+    document.getElementById('ms-type').value = 'practice';
+    onManualTypeChange();
     document.getElementById('ms-date').value = new Date().toISOString().split('T')[0];
     document.getElementById('ms-duration').value = '';
     document.getElementById('ms-correct').value = '';
@@ -149,29 +171,42 @@ function showAddSessionModal() {
     document.getElementById('add-session-modal').classList.remove('hidden');
 }
 
+// Paper worksheets are timed in seconds, website practice in minutes.
+function onManualTypeChange() {
+    const ws = document.getElementById('ms-type').value === 'worksheet';
+    document.getElementById('ms-duration-label').textContent =
+        ws ? 'Time taken (seconds)' : 'Duration (minutes)';
+    document.getElementById('ms-duration').placeholder = ws ? '300' : '5';
+}
+
 async function addSessionManually() {
+    const type    = document.getElementById('ms-type').value;
     const dateStr = document.getElementById('ms-date').value;
-    const durationMin = parseInt(document.getElementById('ms-duration').value);
+    const amount  = parseInt(document.getElementById('ms-duration').value);
     const correct = parseInt(document.getElementById('ms-correct').value) || 0;
     const incorrect = parseInt(document.getElementById('ms-incorrect').value) || 0;
 
-    if (!dateStr || !durationMin || durationMin <= 0) {
+    if (!dateStr || !amount || amount <= 0) {
         alert('Please fill in a valid date and duration.');
         return;
     }
 
     const totalQ = correct + incorrect;
-    const qPerMin = parseFloat((totalQ / durationMin).toFixed(2));
+    const ws = type === 'worksheet';
+    const minutes = ws ? amount / 60 : amount;
 
-    await saveSession({
+    const record = {
         date: new Date(dateStr).toISOString(),
-        durationMin,
+        source: type,
+        durationMin: parseFloat(minutes.toFixed(2)),
         correct,
         incorrect,
         totalQ,
-        qPerMin
-    });
+        qPerMin: parseFloat((totalQ / minutes).toFixed(2))
+    };
+    if (ws) record.timeSeconds = amount;
 
+    await saveSession(record);
     closeModal('add-session-modal');
 }
 

@@ -473,7 +473,27 @@ async function prepareColumnImages(fileData) {
             rowBands: bandsPerCol
         };
 
-        return { parts, previews, split: true, geometry };
+        // Header strip (page top → table top): holds the handwritten Date
+        // (top left) and Time in Sec (top right). Sent to the AI separately
+        // so the worksheet's own date/time can be logged to My Performance.
+        let headerPart = null;
+        const hx0 = Math.max(0, Math.round(a.page.x0 * scale));
+        const hx1 = Math.min(full.width, Math.round((a.page.x1 + 1) * scale));
+        const hy0 = Math.max(0, Math.round(a.page.y0 * scale));
+        const hy1 = Math.max(hy0, Math.round(layout.t * scale) - padY);
+        if (hy1 - hy0 > full.height * 0.015) {
+            const hc = document.createElement('canvas');
+            hc.width  = (hx1 - hx0) + MARGIN * 2;
+            hc.height = (hy1 - hy0) + MARGIN * 2;
+            const hctx = hc.getContext('2d');
+            hctx.fillStyle = '#fff';
+            hctx.fillRect(0, 0, hc.width, hc.height);
+            hctx.drawImage(full, hx0, hy0, hx1 - hx0, hy1 - hy0, MARGIN, MARGIN, hx1 - hx0, hy1 - hy0);
+            headerPart = { base64: hc.toDataURL('image/jpeg', 0.92).split(',')[1], mimeType: 'image/jpeg' };
+        }
+        dbg('headerStrip', headerPart ? { hx0, hx1, hy0, hy1 } : 'none (too short)');
+
+        return { parts, previews, split: true, geometry, headerPart };
     } catch (e) {
         console.warn('[imaging] column split fell back to full page:', e.message, window.__imagingDebug);
         return {

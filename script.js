@@ -1,5 +1,5 @@
 // Auto-stamped by .git/hooks (core.hooksPath = .githooks) on every commit — do not edit by hand.
-const BUILD_TIME = '2026-06-12T09:43:05Z';
+const BUILD_TIME = '2026-06-12T15:24:07Z';
 const REPO = 'Teja1995/Teja1995.github.io';
 
 let time, timer;
@@ -482,6 +482,7 @@ async function endPractice() {
         const qPerMin = parseFloat((totalQ / sessionDurationMin).toFixed(2));
         await saveSession({
             date:        new Date().toISOString(),
+            source:      'practice',
             durationMin: sessionDurationMin,
             correct:     correctCount,
             incorrect:   incorrectCount,

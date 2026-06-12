@@ -1044,6 +1044,90 @@ h1 {
     margin-bottom: 16px;
 }
 
+/* Editable results: student can correct the AI's reading and verdict */
+.answer-input {
+    width: 90px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: inherit;
+    font: inherit;
+    padding: 4px 8px;
+}
+.answer-input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+.verdict-btn {
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    font: inherit;
+    font-size: 1rem;
+    padding: 2px 10px;
+    cursor: pointer;
+}
+.verdict-btn:hover {
+    border-color: var(--border);
+}
+
+/* "Add to My Performance" save panel under the results table */
+.save-performance {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+}
+.save-perf-title {
+    font-size: 0.95rem;
+    margin-bottom: 4px;
+}
+.save-perf-desc {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+}
+.save-perf-fields {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+.save-perf-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+.save-perf-field .settings-input {
+    width: 180px;
+}
+.save-perf-score {
+    font-size: 0.85rem;
+    margin-bottom: 12px;
+}
+.save-perf-status {
+    font-size: 0.8rem;
+    color: #4ade80;
+    margin-top: 8px;
+}
+
+/* Session type badges in the history table */
+.type-badge {
+    font-size: 0.72rem;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+.type-practice {
+    background: rgba(99, 102, 241, 0.15);
+    color: #a5b4fc;
+}
+.type-worksheet {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fcd34d;
+}
+
 /* ─── Responsive ───────────────────────────────────────────── */
 
 @media (max-width: 560px) {

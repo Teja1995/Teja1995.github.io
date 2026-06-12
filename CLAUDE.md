@@ -74,7 +74,9 @@ Before any API call, the uploaded image is processed entirely in the browser (ca
 6. **Column cuts** — vertical ink projection over the table rows only; for each expected boundary (¼, ½, ¾ **of the table width**, not the image width) the cut goes at the **right end of the longest low-ink run** in a ±12% window — i.e. just before the next column's first digit. ⚠ Do NOT cut at the deepest valley/argmin: on **blank** sheets the printed answer underlines are too faint to register at analysis scale, so the empty zone starts right after the printed `=` and an argmin cut slices the underline away from its own question (underlines then appear at the left edge of the *next* column's crop — solved sheets worked only because handwriting added ink there). Right-end-of-run is correct in both cases (verified: `?faint=1` produces identical cuts to the clean case). If widths still look uneven (outside 15–40% each) the cuts fall back to **equal quarters of the table**; full-page fallback only happens when the table itself can't be found.
 7. **Crop** — one JPEG per column plus 260px preview thumbnails. Interior source pads are tiny (4px — the cuts sit just before the next column's digits, so bigger pads bleed neighbour digit slivers in); instead each crop gets a 14px **white margin** drawn around it, because models misread characters touching the image edge.
 
-Returns `{ parts, previews, split, reason?, geometry? }`. Any failure falls back to a single enhanced full-page image (`split: false`, `reason` shown in the preview caption). `prepareEnhancedImage(fileData)` = enhancement only, used when the split checkbox is off.
+Returns `{ parts, previews, split, reason?, geometry?, headerPart? }`. Any failure falls back to a single enhanced full-page image (`split: false`, `reason` shown in the preview caption). `prepareEnhancedImage(fileData)` = enhancement only, used when the split checkbox is off.
+
+**Header strip (`headerPart`, split mode only):** the region between the page top and the table top, cropped as one extra image — it holds the handwritten **Date** (top left) and **Time in Sec** (top right) fields. Skipped (`headerPart: null`) when shorter than 1.5% of the page height, which happens when the page is small in the frame and the header merges into the table block at analysis scale — the save panel fields then just start empty for manual entry.
 
 **Annotation geometry (`geometry` field, split mode only):** `{ canvas, cutsX, top, bottom, rowBands }` — the processed full-page canvas plus column cut x-positions, table band, and per-column text-line bands (`detectRowBands`), all in full-resolution pixels. `detectRowBands` finds contiguous inky row runs per column (gap tolerance 1 analysis row) and **skips printed table border lines** (bands ≤2 rows tall with ink across >60% of the column width — without this filter the bottom border counted as a 49th row in every column). Used by `renderAnnotatedSheet` in upload.js to draw red boxes on wrong answers.
 
@@ -85,6 +87,18 @@ Returns `{ parts, previews, split, reason?, geometry? }`. Any failure falls back
 **Red-box highlighting of wrong answers (`upload.js → renderAnnotatedSheet`):** after `verifyMath`, the processed page image is shown above the results table (`#annotated-sheet` in index.html) with a red rectangle around every row the student answered **incorrectly** (blank/unreadable rows are not boxed — they aren't responses). No AI coordinates involved: the AI reads each column strictly top-to-bottom, so result *i* of a column maps to that column's *i*-th text band from `geometry.rowBands`; `checkWorksheet` tracks `colCounts` (rows returned per column) to do the mapping. If a column's detected band count ≠ its AI row count, rows are placed by even spacing across the table block instead (printed grids are uniform, so this stays accurate). Drawn on a ≤1600px display copy. Only rendered in split mode (full-page mode has no geometry); hidden when nothing is wrong.
 
 **Why split:** sending one column (~48 problems) per request instead of the whole page (~192) means far less for the model to miscount, no token-truncation risk, and no cross-row digit borrowing. `checkWorksheet` runs each column through the failover queue sequentially (via `runWithFailover`), merges all rows, and shows e.g. `192 questions detected · Gemini 2.5 Flash · 4 columns`. Trade-off: 4 API calls per worksheet instead of 1 — heavier on Gemini's 5 RPM free tier (handled by 429 failover to Groq). Controlled by the **"Higher accuracy — enhance image & scan each column separately"** checkbox (on by default); when off, one enhanced full-page image is sent with `WORKSHEET_PROMPT`. Split columns use `COLUMN_PROMPT` instead.
+
+**Editable results + opt-in saving to My Performance (`upload.js`):**
+The results table is editable after every check, because the AI can misread handwriting:
+- **Your Answer** column is an `<input>` per row — when the student corrects what the AI read, `editStudentAnswer` re-verifies just that row with `verifyMath` (our math, not the AI's).
+- The **✓/✗** cell is a button (`toggleVerdict`) — final manual override for any verdict.
+- Every correction re-renders counts, the red-box annotated image, and the save panel's score line (`renderResults` redraws everything from the module-level `lastCheck` state: `{ results, labelText, prep, colCounts }`).
+
+Below the table, the **"Add to My Performance" panel** (`#save-performance`) — *nothing is ever saved automatically*:
+- **Worksheet date** + **Time taken (seconds)** inputs, pre-filled from the header strip read (5th AI call, `readHeaderFields` → `HEADER_PROMPT` → `parseHeaderJSON`; one attempt per available model, no retries — a failure just leaves the fields empty because header reading is a bonus, never worth failing the main results for). `parseSheetDate` converts handwritten `12/6/26` / `12-06-2026` / `1.2.26` to ISO; unparseable → today.
+- Live score line ("Will save: N correct · M wrong · T questions") reflecting all corrections.
+- The save button pushes a session record with `source: 'worksheet'` and `timeSeconds`; `qPerMin = totalQ / (timeSeconds/60)` so speeds are comparable with practice sessions. Button flips to "Saved ✓" (disabled) after saving.
+- The API callers return **raw text**; `callModel` wraps `callModelRaw` + `parseAIJSON` (answer arrays), while the header call uses `callModelRaw` + `parseHeaderJSON` (single object, returns null on any failure).
 
 **Client-side math verification (`upload.js → verifyMath`):**
 Before rendering, `verifyMath(results)` returns a fresh array for every row. `computeAnswer(questionStr)` parses the question and computes the correct answer in JavaScript (handles `+`, `−`, `×`, `÷` (also `:` or plain `/`), and fraction-as-percentage; non-integer results formatted to 2dp). The computed value becomes `correctAnswer`, and `isCorrect` is decided entirely client-side: blank/unreadable/empty is always `false`; otherwise the student's number is compared to the computed value with 0.01 tolerance. AI math errors can never affect the verdict — the model only reads, we do all arithmetic. Blank/unreadable enforcement lives inside `verifyMath` (no separate safety-net loop).
@@ -110,11 +124,12 @@ Models (especially Groq/OpenRouter) frequently return malformed or decorated JSO
 - **Primary failover path:** AI Studio Gemini 2.5 Flash → OpenRouter Gemini 2.5 Flash (same model, separate quota) → Groq/Qwen as last resort.
 
 ### 4. My Performance Tab
-- Line chart (Chart.js): X = session date, Y = questions per minute
-- Tooltip on each point shows: correct count, wrong count, duration
-- Session history table sorted newest first
+- Line chart (Chart.js): X = session date, Y = questions per minute — **one combined chart, two datasets**: *Practice (website)* in indigo and *Worksheets (paper)* in amber. Clicking a legend entry hides/shows that line (Chart.js built-in) — that's how the student views either type separately. A dataset is omitted entirely when it has no sessions (legend hidden if only one type exists).
+- Records distinguish the two via `source: 'practice' | 'worksheet'`; **records without the field count as practice** (pre-feature records, no migration).
+- Tooltip per point: correct, wrong, and duration (`N min` for practice, `N s (paper worksheet)` for worksheets)
+- Session history table sorted newest first, with a **Type badge column** (🖥 Practice / 📄 Worksheet); worksheet rows show duration in seconds
 - Delete any session (confirmation modal)
-- Manually add a session (date, duration, correct, wrong) — useful for paper sessions
+- Manually add a session — the modal has a **session type dropdown**; for worksheets the duration field switches to seconds (`timeSeconds` stored, `durationMin`/`qPerMin` derived)
 
 ### 5. Settings Tab — Multi-Model AI Selector
 - 4 model cards displayed in a 2-column grid (1 column on mobile)
@@ -194,7 +209,9 @@ sessions/
     records/
       {pushId}/
         date        — ISO 8601 string
-        durationMin — integer (minutes set by user)
+        source      — 'practice' | 'worksheet' (absent on old records = practice)
+        durationMin — minutes (integer for practice; float 2dp = timeSeconds/60 for worksheets)
+        timeSeconds — integer, worksheet records only (handwritten "Time in Sec")
         correct     — integer
         incorrect   — integer
         totalQ      — correct + incorrect
@@ -321,3 +338,7 @@ Apply in: Firebase Console → Realtime Database → Rules → Publish.
 | Prompts are operator-agnostic (`+ − × ÷`) | Worksheets follow the same layout but vary the operation; prompts hard-coded to "addition"/"+ sign" would misread other sheets. `computeAnswer` likewise handles all four operators plus percentages. |
 | Red boxes on wrong answers use client-side geometry, not AI coordinates | Vision models (especially Llama) can't return reliable bounding boxes. The splitter already knows column cuts and text-line bands; the AI reads top-to-bottom per column, so row *i* of column *c* maps deterministically to a page location. Border lines are filtered from band detection (a 1–2 row band with >60% column-width ink is a printed line, not text). |
 | Split preview collapsed by default | Once the splitter proved reliable, the 4 thumbnails were visual noise on every upload. A "Show image preview" toggle keeps them one tap away for debugging; the split-failure warning still always shows. |
+| Worksheet save to My Performance is opt-in + editable | The AI misreads handwriting sometimes, so the student reviews first: answers and ✓/✗ verdicts are correctable in the results table, the date/time read from the header is editable, and only an explicit "Add to My Performance" tap saves. Nothing automatic. |
+| Header date/time read is a best-effort 5th call | It's the 5th Gemini call in a minute (5 RPM limit), so it often 429s — one attempt per model, no retries, failure just leaves the fields blank for manual entry. The main results must never wait on or fail because of a bonus field. |
+| Worksheet speed stored as qPerMin (totalQ ÷ timeSeconds/60) | Same unit as practice sessions so one chart axis serves both; `timeSeconds` is kept alongside for display. |
+| Combined chart, separable via legend | One chart with two colored datasets (practice indigo, worksheet amber); Chart.js's built-in legend toggle gives "view separately" for free — no custom filter UI. |
