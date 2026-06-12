@@ -163,6 +163,16 @@ h1 {
     -webkit-text-fill-color: transparent;
     background-clip: text;
 }
+.version-badge {
+    font-size: 0.65rem;
+    font-weight: 400;
+    color: var(--text-muted);
+    opacity: 0.6;
+    letter-spacing: 0.02em;
+    margin-left: 4px;
+    align-self: flex-end;
+    margin-bottom: 1px;
+}
 
 .user-area {
     display: flex;

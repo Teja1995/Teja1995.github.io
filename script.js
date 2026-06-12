@@ -1,3 +1,5 @@
+const APP_VERSION = '2026-06-12 · 1a2d1ce';
+
 let time, timer;
 let correctCount = 0;
 let incorrectCount = 0;
@@ -248,6 +250,14 @@ function initializeQuote() {
 window.addEventListener('load', () => {
     initializeQuote();
     renderOperationSelector();
+
+    const brand = document.querySelector('.app-brand');
+    if (brand) {
+        const badge = document.createElement('span');
+        badge.className = 'version-badge';
+        badge.textContent = APP_VERSION;
+        brand.appendChild(badge);
+    }
 });
 
 function startPractice() {
