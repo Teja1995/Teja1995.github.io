@@ -364,7 +364,8 @@ function setLoadingMessage(msg) {
 }
 
 // Show the exact images sent to the AI so column-split problems are
-// immediately visible to the user.
+// visible on demand. Collapsed by default; a split-failure warning is
+// always shown because the user should know full-page mode kicked in.
 function renderSplitPreview(prep) {
     const box = document.getElementById('split-preview');
     if (!box) return;
@@ -377,11 +378,21 @@ function renderSplitPreview(prep) {
         ? `Detected ${prep.previews.length} columns — this is exactly what the AI reads:`
         : `Could not split columns reliably${prep.reason ? ` (${esc(prep.reason)})` : ''} — sending the whole enhanced page:`;
     box.innerHTML = `
-        <p class="split-preview-title">${title}</p>
-        <div class="split-preview-row">
-            ${prep.previews.map(u => `<img src="${u}" alt="Column preview">`).join('')}
+        ${prep.split ? '' : `<p class="split-preview-title">${title}</p>`}
+        <button type="button" class="split-preview-toggle" onclick="toggleSplitPreview(this)">Show image preview ▸</button>
+        <div class="split-preview-body hidden">
+            ${prep.split ? `<p class="split-preview-title">${title}</p>` : ''}
+            <div class="split-preview-row">
+                ${prep.previews.map(u => `<img src="${u}" alt="Column preview">`).join('')}
+            </div>
         </div>`;
     box.classList.remove('hidden');
+}
+
+function toggleSplitPreview(btn) {
+    const body = btn.parentElement.querySelector('.split-preview-body');
+    const hidden = body.classList.toggle('hidden');
+    btn.textContent = hidden ? 'Show image preview ▸' : 'Hide image preview ▾';
 }
 
 // Try each model in the queue for a single image; returns { results, model }
@@ -443,17 +454,19 @@ async function checkWorksheet() {
         const prompt = prep.split ? COLUMN_PROMPT : WORKSHEET_PROMPT;
 
         const allResults = [];
+        const colCounts  = [];   // rows returned per column — maps results back to page geometry
         const modelsUsed = new Set();
         for (let c = 0; c < images.length; c++) {
             const label = images.length > 1 ? `Reading column ${c + 1} of ${images.length}` : 'Analysing worksheet';
             const { results, model } = await runWithFailover(queue, images[c], prompt, label);
             allResults.push(...results);
+            colCounts.push(results.length);
             modelsUsed.add(model.name);
         }
 
         const cols = images.length;
         const labelText = [...modelsUsed].join(', ') + (cols > 1 ? ` · ${cols} columns` : '');
-        displayWorksheetResults(allResults, labelText);
+        displayWorksheetResults(allResults, labelText, prep, colCounts);
     } catch (err) {
         alert('Could not check worksheet: ' + (err?.message || 'Unknown error'));
     } finally {
@@ -509,8 +522,68 @@ function verifyMath(results) {
 
 // ─── Results rendering ─────────────────────────────────────────
 
-function displayWorksheetResults(results, labelText) {
+// Draw red boxes around wrongly-ANSWERED rows on the processed page image.
+// Geometry comes from imaging.js (column cuts + per-row text bands); the AI
+// reads each column strictly top to bottom, so result i of a column maps to
+// that column's i-th text band. If the detected band count doesn't match the
+// AI's row count, the rows are placed by even spacing across the table block
+// instead. Blank/unreadable rows are not boxed — they aren't responses.
+function renderAnnotatedSheet(prep, results, colCounts) {
+    const box = document.getElementById('annotated-sheet');
+    if (!box) return;
+    box.classList.add('hidden');
+    box.innerHTML = '';
+    const g = prep && prep.geometry;
+    if (!g || !colCounts || colCounts.length === 0) return;
+
+    const src = g.canvas;
+    const scale = Math.min(1, 1600 / src.width);  // display copy, keeps memory sane
+    const c = document.createElement('canvas');
+    c.width  = Math.round(src.width * scale);
+    c.height = Math.round(src.height * scale);
+    const ctx = c.getContext('2d');
+    ctx.drawImage(src, 0, 0, c.width, c.height);
+    ctx.strokeStyle = '#ef4444';
+    ctx.lineWidth = Math.max(2, Math.round(c.width * 0.0025));
+
+    let drawn = 0, idx = 0;
+    for (let col = 0; col < colCounts.length; col++) {
+        const n = colCounts[col];
+        const bands = g.rowBands[col] || [];
+        const useBands = bands.length === n;
+        const x0 = g.cutsX[col], x1 = g.cutsX[col + 1];
+        for (let i = 0; i < n; i++, idx++) {
+            const r = results[idx];
+            if (!r || r.isCorrect) continue;
+            const ans = String(r.studentAnswer ?? '').trim();
+            if (ans === '' || /^(blank|unreadable)$/i.test(ans)) continue;
+            let y0, y1;
+            if (useBands) {
+                y0 = bands[i].y0; y1 = bands[i].y1;
+            } else {
+                y0 = g.top + (g.bottom - g.top) * i / n;
+                y1 = g.top + (g.bottom - g.top) * (i + 1) / n;
+            }
+            const pad = (y1 - y0) * 0.2;
+            ctx.strokeRect(x0 * scale, (y0 - pad) * scale,
+                           (x1 - x0) * scale, (y1 - y0 + 2 * pad) * scale);
+            drawn++;
+        }
+    }
+    if (drawn === 0) return;
+
+    const title = document.createElement('p');
+    title.className = 'annotated-title';
+    title.textContent = `${drawn} incorrect answer${drawn === 1 ? '' : 's'} marked in red:`;
+    c.className = 'annotated-canvas';
+    box.appendChild(title);
+    box.appendChild(c);
+    box.classList.remove('hidden');
+}
+
+function displayWorksheetResults(results, labelText, prep, colCounts) {
     results = verifyMath(results);
+    renderAnnotatedSheet(prep, results, colCounts);
 
     const tbody = document.getElementById('results-tbody');
     tbody.innerHTML = '';

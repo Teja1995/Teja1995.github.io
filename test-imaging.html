@@ -14,7 +14,9 @@
 <body>
 <pre id="out">running…</pre>
 <div id="thumbs"></div>
+<div id="annotated-sheet"></div>
 <script src="imaging.js"></script>
+<script src="upload.js"></script>
 <script>
 function drawSheet(faint) {
     const c = document.createElement('canvas');
@@ -81,10 +83,35 @@ function photoify(sheet) {
         const base64 = sheet.toDataURL('image/jpeg', 0.9).split(',')[1];
         const prep = await prepareColumnImages({ base64, mimeType: 'image/jpeg' });
 
+        // Exercise the red-box annotation renderer (upload.js) with fabricated
+        // verdicts: rows 5 and 20 of every column answered wrong, row 0 blank.
+        // Expect "8 incorrect answers marked in red:" on a clean 4-column split.
+        let annotated = 'skipped (no geometry)';
+        if (prep.geometry) {
+            const fake = [], counts = [];
+            for (let col = 0; col < 4; col++) {
+                const n = 48;
+                counts.push(n);
+                for (let i = 0; i < n; i++) {
+                    const wrong = (i === 5 || i === 20);
+                    fake.push({
+                        question: '1 + 1',
+                        studentAnswer: i === 0 ? 'blank' : (wrong ? '99' : '2'),
+                        correctAnswer: '2',
+                        isCorrect: !wrong && i !== 0
+                    });
+                }
+            }
+            renderAnnotatedSheet(prep, fake, counts);
+            const t = document.querySelector('#annotated-sheet .annotated-title');
+            annotated = t ? t.textContent : 'NO BOXES DRAWN';
+        }
+
         out.textContent =
             'RESULT split=' + prep.split +
             ' parts=' + prep.parts.length +
             (prep.reason ? ' reason=' + prep.reason : '') +
+            '\nANNOTATED ' + annotated +
             '\nDEBUG ' + JSON.stringify(window.__imagingDebug, null, 1);
 
         for (const u of prep.previews) {

@@ -351,10 +351,43 @@ function columnCuts(mask, w, h, page) {
     return { cuts, t: block.t, b: block.b };
 }
 
+// Detect the horizontal text-line bands inside one column of the table
+// (each band ≈ one printed problem row). Used to place red highlight boxes
+// on the marked-up result image; counts that don't match the AI's row count
+// fall back to even spacing at draw time, so imperfect detection is safe.
+function detectRowBands(mask, w, x0, x1, t, b) {
+    const colW = x1 - x0 + 1;
+    const thr = Math.max(1, colW * 0.03);
+    const bands = [];
+    let start = -1, lastInk = -1, peak = 0;
+    for (let y = t; y <= b + 1; y++) {
+        let s = 0;
+        if (y <= b) {
+            const row = y * w;
+            for (let x = x0; x <= x1; x++) s += mask[row + x];
+        }
+        if (y <= b && s >= thr) {
+            if (start === -1) { start = y; peak = 0; }
+            lastInk = y;
+            if (s > peak) peak = s;
+        } else if (start !== -1 && (y - lastInk > 1 || y > b)) {
+            // gap tolerance of 1 row bridges specks inside a text line.
+            // Skip printed table border lines: 1–2 rows tall with ink across
+            // nearly the whole column width — text rows are never that solid.
+            const isBorderLine = lastInk - start <= 1 && peak > colW * 0.6;
+            if (!isBorderLine) bands.push({ y0: start, y1: lastInk });
+            start = -1;
+        }
+    }
+    return bands;
+}
+
 // ─── Public API ────────────────────────────────────────────────
 
 // Enhance + geometry-correct + split into per-column images.
-// Returns { parts: [{base64, mimeType}], previews: [dataUrl], split: bool }.
+// Returns { parts: [{base64, mimeType}], previews: [dataUrl], split: bool,
+//           geometry?: { canvas, cutsX, top, bottom, rowBands } } — geometry
+// (full-res px) lets upload.js draw red boxes on wrongly-answered rows.
 async function prepareColumnImages(fileData) {
     DBG = (typeof window !== 'undefined') ? (window.__imagingDebug = {}) : null;
     const img = await base64ToImage(fileData.base64, fileData.mimeType);
@@ -420,7 +453,27 @@ async function prepareColumnImages(fileData) {
             parts.push({ base64: c.toDataURL('image/jpeg', 0.92).split(',')[1], mimeType: 'image/jpeg' });
             previews.push(thumbnail(c));
         }
-        return { parts, previews, split: true };
+
+        // Geometry for the annotated result image (red boxes on wrong rows):
+        // the processed page canvas plus column cuts and per-column text-line
+        // bands, all in full-resolution pixel coordinates.
+        const bandsPerCol = [];
+        for (let k = 0; k < COLUMN_COUNT; k++) {
+            bandsPerCol.push(
+                detectRowBands(a.mask, a.w, layout.cuts[k], layout.cuts[k + 1], layout.t, layout.b)
+                    .map(bd => ({ y0: Math.round(bd.y0 * scale), y1: Math.round((bd.y1 + 1) * scale) }))
+            );
+        }
+        dbg('rowBandCounts', bandsPerCol.map(b => b.length));
+        const geometry = {
+            canvas: full,
+            cutsX:  layout.cuts.map(x => Math.round(x * scale)),
+            top:    Math.round(layout.t * scale),
+            bottom: Math.round((layout.b + 1) * scale),
+            rowBands: bandsPerCol
+        };
+
+        return { parts, previews, split: true, geometry };
     } catch (e) {
         console.warn('[imaging] column split fell back to full page:', e.message, window.__imagingDebug);
         return {
