@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<!-- Dev-only test harness for imaging.js. Not linked from the app.
+     Draws a synthetic worksheet matching the real layout (header, border box,
+     title, 4 columns x 48 rows of "NN + NN = ____"), runs prepareColumnImages,
+     and writes the outcome into <body> so it can be read headlessly:
+
+       msedge --headless=new --virtual-time-budget=15000 --dump-dom test-imaging.html
+
+     Query params: ?skew=3 (tilt degrees), ?rot=180 (flip), ?photo=1 (adds desk
+     background + off-centre page like a phone photo). -->
+<html>
+<head><meta charset="UTF-8"><title>imaging test</title></head>
+<body>
+<pre id="out">running…</pre>
+<div id="thumbs"></div>
+<script src="imaging.js"></script>
+<script>
+function drawSheet() {
+    const c = document.createElement('canvas');
+    c.width = 1088; c.height = 1408;
+    const x = c.getContext('2d');
+    x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+    x.fillStyle = '#000';
+
+    // header
+    x.font = '16px Arial';
+    x.fillText('Date :____________________', 90, 52);
+    x.fillText('Name:____________________', 90, 78);
+    x.fillText('Time in Sec:________', 830, 52);
+    x.fillText('NoM:________', 870, 78);
+
+    // table border + title
+    x.strokeStyle = '#000'; x.lineWidth = 1.5;
+    x.strokeRect(85, 95, 910, 1290);
+    x.font = 'bold 18px Arial';
+    x.fillText('Additions Exercise- I', 440, 128);
+
+    // 4 columns x 48 rows
+    x.font = '15px Arial';
+    const colX = [110, 340, 575, 810];
+    for (let col = 0; col < 4; col++) {
+        for (let r = 0; r < 48; r++) {
+            const y = 168 + r * 25.2;
+            const a = 10 + ((col * 48 + r) * 7) % 90;
+            const b = 10 + ((col * 48 + r) * 13) % 90;
+            x.fillText(`${a} + ${b} =`, colX[col], y);
+            x.fillRect(colX[col] + 92, y + 3, 82, 2); // printed answer underline
+        }
+    }
+    return c;
+}
+
+// Optional photo-like degradation: page pasted off-centre on a dark desk.
+function photoify(sheet) {
+    const c = document.createElement('canvas');
+    c.width = 1300; c.height = 1650;
+    const x = c.getContext('2d');
+    x.fillStyle = '#5a4632'; // desk
+    x.fillRect(0, 0, c.width, c.height);
+    x.drawImage(sheet, 130, 90, 1020, 1320); // smaller, off-centre page
+    return c;
+}
+
+(async () => {
+    const out = document.getElementById('out');
+    try {
+        const params = new URLSearchParams(location.search);
+        let sheet = drawSheet();
+        if (params.get('photo')) sheet = photoify(sheet);
+        const skew = parseFloat(params.get('skew') || '0');
+        const rot  = parseFloat(params.get('rot') || '0');
+        if (skew || rot) sheet = rotateCanvas(sheet, skew + rot); // reuse imaging.js helper
+
+        const base64 = sheet.toDataURL('image/jpeg', 0.9).split(',')[1];
+        const prep = await prepareColumnImages({ base64, mimeType: 'image/jpeg' });
+
+        out.textContent =
+            'RESULT split=' + prep.split +
+            ' parts=' + prep.parts.length +
+            (prep.reason ? ' reason=' + prep.reason : '') +
+            '\nDEBUG ' + JSON.stringify(window.__imagingDebug, null, 1);
+
+        for (const u of prep.previews) {
+            const im = new Image(); im.src = u; im.style.width = '120px';
+            document.getElementById('thumbs').appendChild(im);
+        }
+    } catch (e) {
+        out.textContent = 'THREW ' + e.message + '\n' + e.stack;
+    }
+})();
+</script>
+</body>
+</html>

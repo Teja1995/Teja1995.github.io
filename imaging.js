@@ -15,6 +15,10 @@ const ANALYSIS_WIDTH  = 520;   // small copy used for geometry analysis
 const COLUMN_COUNT    = 4;
 const CONTRAST        = 1.4;
 
+// Per-run diagnostics, inspectable as window.__imagingDebug in the console.
+let DBG = null;
+function dbg(key, value) { if (DBG) DBG[key] = value; }
+
 // ─── Basic helpers ─────────────────────────────────────────────
 
 function base64ToImage(base64, mimeType) {
@@ -37,7 +41,13 @@ function imageToCanvas(img) {
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
-    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+    const ctx = canvas.getContext('2d');
+    // White-fill first: transparent PNG pixels otherwise read as BLACK in
+    // getImageData, which turns the whole background into "ink" and breaks
+    // every geometry step downstream.
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
     return canvas;
 }
 
@@ -220,7 +230,10 @@ function tableBlock(mask, w, h, page) {
         }
     }
     if (t !== -1 && lastInk - t > bestB - bestT) { bestT = t; bestB = lastInk; }
-    if (bestT < 0 || bestB - bestT < (page.y1 - page.y0) * 0.3) return null;
+    if (bestT < 0 || bestB - bestT < (page.y1 - page.y0) * 0.3) {
+        dbg('blockFail', { bestT, bestB, pageH: page.y1 - page.y0 });
+        return null;
+    }
     return { t: bestT, b: bestB, rowInk };
 }
 
@@ -252,7 +265,11 @@ function columnCuts(mask, w, h, page) {
     const bh = block.b - block.t + 1;
     const tx0 = firstIdx(colInk, v => v > bh * 0.02);
     const tx1 = lastIdx(colInk,  v => v > bh * 0.02);
-    if (tx0 < 0 || tx1 - tx0 < w * 0.3) return null;
+    dbg('table', { t: block.t, b: block.b, tx0, tx1 });
+    if (tx0 < 0 || tx1 - tx0 < w * 0.3) {
+        dbg('tableXFail', { tx0, tx1, minWidth: Math.round(w * 0.3) });
+        return null;
+    }
 
     // Smooth with a small moving average so single noisy pixels don't win
     const win = Math.max(2, Math.round((tx1 - tx0) * 0.01));
@@ -279,10 +296,26 @@ function columnCuts(mask, w, h, page) {
     }
     cuts.push(tx1);
 
-    // Sanity: 4 regions of roughly equal width (15%–40% of the table each)
+    // Sanity: 4 regions of roughly equal width (15%–40% of the table each).
+    // The layout is a fixed grid, so if the valleys look uneven we don't give
+    // up on splitting — we fall back to equal quarters OF THE TABLE, which is
+    // almost always right once the table bounds are known.
+    const widths = [];
+    let uneven = false;
     for (let k = 0; k < COLUMN_COUNT; k++) {
         const frac = (cuts[k + 1] - cuts[k]) / tw;
-        if (frac < 0.15 || frac > 0.40) return null;
+        widths.push(+frac.toFixed(3));
+        if (frac < 0.15 || frac > 0.40) uneven = true;
+    }
+    dbg('valleyCuts', cuts.slice());
+    dbg('valleyWidths', widths);
+    if (uneven) {
+        for (let k = 1; k < COLUMN_COUNT; k++) {
+            cuts[k] = tx0 + Math.round(tw * k / COLUMN_COUNT);
+        }
+        dbg('cutMode', 'equal-quarters (valleys uneven)');
+    } else {
+        dbg('cutMode', 'valleys');
     }
     return { cuts, t: block.t, b: block.b };
 }
@@ -292,36 +325,43 @@ function columnCuts(mask, w, h, page) {
 // Enhance + geometry-correct + split into per-column images.
 // Returns { parts: [{base64, mimeType}], previews: [dataUrl], split: bool }.
 async function prepareColumnImages(fileData) {
+    DBG = (typeof window !== 'undefined') ? (window.__imagingDebug = {}) : null;
     const img = await base64ToImage(fileData.base64, fileData.mimeType);
     let full = imageToCanvas(img);
     enhanceCanvas(full);
 
     try {
-        // Orientation: compare text-line signal upright vs rotated 90° and
-        // keep whichever reads as horizontal text.
+        // Orientation: worksheets are portrait. If the detected paper region
+        // is landscape, stand it up; the 180° header check below corrects the
+        // direction if this guess was the wrong way round. (A variance-based
+        // "which way is the text" comparison was tried first and falsely
+        // rotated upright photos — aspect ratio is deterministic.)
         let a = analyzeSmall(full);
-        const s0 = skewScore(a.mask, a.w, a.h);
-        const rot = rotateCanvas(full, 90);
-        const aR = analyzeSmall(rot);
-        const sR = skewScore(aR.mask, aR.w, aR.h);
-        let skewAngle = s0.angle;
-        if (sR.score > s0.score * 1.2) { full = rot; a = aR; skewAngle = sR.angle; }
+        dbg('page', { ...a.page, w: a.w, h: a.h });
+        const pageW = a.page.x1 - a.page.x0, pageH = a.page.y1 - a.page.y0;
+        if (pageW > pageH * 1.15) {
+            full = rotateCanvas(full, 90);
+            a = analyzeSmall(full);
+            dbg('rotated90', true);
+        }
 
         // Upside down? (header ink should be above the table, margin below)
         if (flip180Needed(a.mask, a.w, a.h, a.page)) {
             full = rotateCanvas(full, 180);
             a = analyzeSmall(full);
-            skewAngle = skewScore(a.mask, a.w, a.h).angle;
+            dbg('flipped180', true);
         }
 
         // Small tilt
+        const skewAngle = skewScore(a.mask, a.w, a.h).angle;
+        dbg('skewAngle', skewAngle);
         if (Math.abs(skewAngle) >= 0.5) {
             full = rotateCanvas(full, -skewAngle);
             a = analyzeSmall(full);
         }
 
         const layout = columnCuts(a.mask, a.w, a.h, a.page);
-        if (!layout) throw new Error('no clean 4-column layout found');
+        if (!layout) throw new Error('table or columns not found (see __imagingDebug)');
 
         const scale = full.width / a.w;
         const padX = Math.round(full.width * 0.01);
@@ -342,11 +382,12 @@ async function prepareColumnImages(fileData) {
         }
         return { parts, previews, split: true };
     } catch (e) {
-        console.warn('[imaging] column split fell back to full page:', e.message);
+        console.warn('[imaging] column split fell back to full page:', e.message, window.__imagingDebug);
         return {
             parts: [{ base64: full.toDataURL('image/jpeg', 0.92).split(',')[1], mimeType: 'image/jpeg' }],
             previews: [thumbnail(full)],
-            split: false
+            split: false,
+            reason: e.message
         };
     }
 }

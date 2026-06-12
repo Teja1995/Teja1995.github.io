@@ -375,7 +375,7 @@ function renderSplitPreview(prep) {
     }
     const title = prep.split
         ? `Detected ${prep.previews.length} columns — this is exactly what the AI reads:`
-        : 'Could not split columns reliably — sending the whole enhanced page:';
+        : `Could not split columns reliably${prep.reason ? ` (${esc(prep.reason)})` : ''} — sending the whole enhanced page:`;
     box.innerHTML = `
         <p class="split-preview-title">${title}</p>
         <div class="split-preview-row">
