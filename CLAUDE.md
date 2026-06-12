@@ -10,8 +10,9 @@ A browser-based mental math practice tool for students. No build system — plai
 index.html          — single-page app shell (all views + modals)
 styles.css          — all styling (dark glassmorphism theme, Inter font)
 models.js           — AI model registry: configs, icons, guides, API endpoints
-script.js           — tab routing, settings/model-selection logic, practice session logic
+script.js           — tab routing, settings/model-selection logic, practice session logic, APP_VERSION badge
 auth.js             — Google Sign-in, auth state, all model key restore on login
+imaging.js          — client-side image enhancement (contrast/sharpen) + 4-column splitting
 upload.js           — file handling, multi-model API calls, retry + auto-failover logic
 performance.js      — session save/load/delete, Chart.js chart, manual add modal
 firebase-config.js  — Firebase project credentials + initialises firebase + db globals
@@ -61,6 +62,14 @@ The model's only job is to read handwriting — it never computes answers. `corr
 - **Completeness without fabrication:** report only rows actually visible — never invent or duplicate a problem to hit a count. (An earlier "must return exactly 192" rule caused the model to fabricate rows when it couldn't read them all.)
 
 **Truncation note:** `MAX_OUTPUT_TOKENS = 16384`. A full ~192-item JSON response is ~6k tokens; the previous 8192 limit could truncate the array mid-way, which showed up as a too-low question count. The headroom prevents that.
+
+**Client-side image enhancement + column splitting (`imaging.js`):**
+Before any API call, the uploaded image is processed entirely in the browser (canvas only, no libraries):
+- `prepareColumnImages(fileData)` → downscale huge photos to ≤2600px long side, grayscale + contrast boost (`CONTRAST = 1.4`) + a 3×3 sharpen pass, then detect the 4 columns and crop each into its own JPEG.
+- **Column detection** uses a vertical ink-density projection over the body region (skips header/footer); for each expected boundary (¼, ½, ¾ of width) it snaps the cut to the emptiest pixel-column within ±8%. Falls back to a single enhanced image if detection looks wrong (not 4 regions, or any region <10% width).
+- `prepareEnhancedImage(fileData)` → same enhancement, no split (used when the split checkbox is off).
+
+**Why split:** sending one column (~48 problems) per request instead of the whole page (~192) means far less for the model to miscount, no token-truncation risk, and no cross-row digit borrowing. `checkWorksheet` runs each column through the failover queue sequentially (via `runWithFailover`), merges all rows, and shows e.g. `192 questions detected · Gemini 2.5 Flash · 4 columns`. Trade-off: 4 API calls per worksheet instead of 1 — heavier on Gemini's 5 RPM free tier (handled by 429 failover to Groq). Controlled by the **"Higher accuracy — enhance image & scan each column separately"** checkbox (on by default); when off, one enhanced full-page image is sent with `WORKSHEET_PROMPT`. Split columns use `COLUMN_PROMPT` instead.
 
 **Client-side math verification (`upload.js → verifyMath`):**
 Before rendering, `verifyMath(results)` returns a fresh array for every row. `computeAnswer(questionStr)` parses the question and computes the correct answer in JavaScript (handles `+`, `−`, `×`, and fraction-as-percentage). The computed value becomes `correctAnswer`, and `isCorrect` is decided entirely client-side: blank/unreadable/empty is always `false`; otherwise the student's number is compared to the computed value with 0.01 tolerance. AI math errors can never affect the verdict — the model only reads, we do all arithmetic. Blank/unreadable enforcement lives inside `verifyMath` (no separate safety-net loop).
@@ -291,3 +300,5 @@ Apply in: Firebase Console → Realtime Database → Rules → Publish.
 | Count `=` signs before reading (Step 2) + self-verify after (Step 7) | Model was skipping columns and returning inconsistent counts on repeated runs. Counting all `=` signs first forces the model to acknowledge the full image; the self-verify step catches early exits before the response is returned. |
 | Temperature = 0 on all API calls | Temperature 0.1 caused different results on identical images. Setting to 0 makes output fully deterministic — the same image always produces the same response from the same model. |
 | Auto-retry checkbox (checked by default) | Users wanted to control whether the app silently switches models. Checkbox unchecked = selected model only, no failover; checkbox checked = current behaviour. |
+| Client-side image enhancement + 4-column splitting (`imaging.js`) | A single 192-problem page overwhelmed the vision models (miscounts, cross-row borrowing, truncation). Enhancing contrast/sharpness improves handwriting reading; splitting into 4 per-column images (~48 problems each) drastically reduces those errors. Pure canvas/JS — no OpenCV dependency. Trade-off is 4 API calls per worksheet (heavier on 5 RPM Gemini), so it's a checkbox, on by default. |
+| Column detection via ink-density projection, not OpenCV | Worksheets have a fixed 4-column layout with clear vertical gaps; a simple per-column dark-pixel projection that snaps each ¼/½/¾ cut to the emptiest nearby column is enough, with a fallback to a single image if it looks wrong. Avoids shipping a heavy CV library. |

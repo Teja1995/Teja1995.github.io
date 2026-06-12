@@ -129,6 +129,31 @@ Return ONLY a JSON array, nothing else — no markdown, no code fences, no comme
 [{"question":"46 + 85","studentAnswer":"131","correctAnswer":"","isCorrect":false}]
 Always set "correctAnswer" to "" and "isCorrect" to false — the app fills these in itself.`;
 
+// Used when the page is split into single columns (one column per image).
+const COLUMN_PROMPT =
+`You are checking ONE COLUMN from a student's addition worksheet. This image is a single vertical strip of problems stacked top to bottom (about 40–50 of them). Read the handwriting only — never calculate any answer yourself.
+
+Each problem is on ONE horizontal line:
+    number  +  number  =  answer
+The student's answer is the handwritten number written after the = sign.
+
+HOW TO READ EACH LINE
+1. Find the + sign. The number immediately LEFT and the number immediately RIGHT of it are the two operands — both on that same line.
+2. Find the = sign on the same line. The handwritten number after it is the student's answer.
+3. The operands and the answer all share ONE line. NEVER take a digit from the line above or below.
+
+Read strictly top to bottom. Report EVERY problem you can see; never invent or duplicate one.
+
+THE STUDENT'S ANSWER
+- Handwriting present (even faint pencil) → copy the number exactly as written.
+- Nothing written after the = sign → "blank"
+- Written but impossible to read → "unreadable"
+
+OUTPUT
+Return ONLY a JSON array, nothing else — no markdown, no commentary:
+[{"question":"46 + 85","studentAnswer":"131","correctAnswer":"","isCorrect":false}]
+Always set "correctAnswer" to "" and "isCorrect" to false — the app fills these in itself.`;
+
 // ─── Per-format API callers ────────────────────────────────────
 
 const MAX_OUTPUT_TOKENS = 16384; // a full ~192-item response is ~6k tokens; headroom avoids truncation
@@ -147,11 +172,11 @@ async function postJSON(url, headers, body) {
     return response.json();
 }
 
-async function callGeminiAPI(model, base64, mimeType, apiKey) {
+async function callGeminiAPI(model, base64, mimeType, apiKey, prompt) {
     const data = await postJSON(`${model.endpoint}?key=${apiKey}`, {}, {
         contents: [{
             parts: [
-                { text: WORKSHEET_PROMPT },
+                { text: prompt },
                 { inline_data: { mime_type: mimeType, data: base64 } }
             ]
         }],
@@ -160,13 +185,13 @@ async function callGeminiAPI(model, base64, mimeType, apiKey) {
     return parseAIJSON(data.candidates?.[0]?.content?.parts?.[0]?.text || '', model.name);
 }
 
-async function callOpenAICompatAPI(model, base64, mimeType, apiKey) {
+async function callOpenAICompatAPI(model, base64, mimeType, apiKey, prompt) {
     const data = await postJSON(model.endpoint, { 'Authorization': `Bearer ${apiKey}` }, {
         model: model.modelId,
         messages: [{
             role: 'user',
             content: [
-                { type: 'text', text: WORKSHEET_PROMPT },
+                { type: 'text', text: prompt },
                 { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } }
             ]
         }],
@@ -275,11 +300,11 @@ function parseAIJSON(text, modelName = 'unknown') {
     throw new Error('The AI returned a response this app could not read. Please try again or switch models in Settings.');
 }
 
-async function callModel(model, { base64, mimeType }, apiKey) {
+async function callModel(model, { base64, mimeType }, apiKey, prompt) {
     if (model.apiFormat === 'gemini') {
-        return callGeminiAPI(model, base64, mimeType, apiKey);
+        return callGeminiAPI(model, base64, mimeType, apiKey, prompt);
     } else {
-        return callOpenAICompatAPI(model, base64, mimeType, apiKey);
+        return callOpenAICompatAPI(model, base64, mimeType, apiKey, prompt);
     }
 }
 
@@ -298,11 +323,11 @@ function isTransientError(err) {
 
 const RETRY_DELAYS = [5000, 15000, 30000];
 
-async function tryModelWithRetries(model, fileData, apiKey) {
+async function tryModelWithRetries(model, fileData, apiKey, prompt) {
     let lastErr;
     for (let i = 0; i < 3; i++) {
         try {
-            return await callModel(model, fileData, apiKey);
+            return await callModel(model, fileData, apiKey, prompt);
         } catch (err) {
             lastErr = err;
             // Rate limit = switch immediately, no point retrying same model
@@ -326,53 +351,81 @@ function setLoadingMessage(msg) {
     if (p) p.textContent = msg;
 }
 
+// Try each model in the queue for a single image; returns { results, model }
+// or throws after exhausting the queue.
+async function runWithFailover(queue, fileData, prompt, label) {
+    let lastErr;
+    for (let mi = 0; mi < queue.length; mi++) {
+        const model = queue[mi];
+        const apiKey = localStorage.getItem(model.keyStorageKey);
+        setLoadingMessage(`${label} with ${model.name}…`);
+        try {
+            const results = await tryModelWithRetries(model, fileData, apiKey, prompt);
+            return { results, model };
+        } catch (err) {
+            lastErr = err;
+            const canSwitch = (isRateLimitError(err) || isTransientError(err)) && mi < queue.length - 1;
+            if (!canSwitch) throw err;
+            const next = queue[mi + 1];
+            setLoadingMessage(`${model.name} unavailable — switching to ${next.name}…`);
+            await new Promise(r => setTimeout(r, 1500));
+        }
+    }
+    throw lastErr;
+}
+
 async function checkWorksheet() {
     if (!selectedFileData) return;
 
     const selectedId = localStorage.getItem('selectedModel') || 'gemini-2.5-flash';
-    const orderedModels = getFailoverOrder(selectedId);
-    const allAvailable = orderedModels.filter(m => localStorage.getItem(m.keyStorageKey));
+    const available = getFailoverOrder(selectedId)
+        .filter(m => localStorage.getItem(m.keyStorageKey));
 
-    if (allAvailable.length === 0) {
+    if (available.length === 0) {
         alert('No API key found. Please go to Settings and add a key for at least one AI model.');
         showTab('settings');
         return;
     }
 
-    const autoRetry = document.getElementById('auto-retry-checkbox')?.checked ?? true;
-    const queue = autoRetry ? allAvailable : allAvailable.slice(0, 1);
+    const autoRetry  = document.getElementById('auto-retry-checkbox')?.checked ?? true;
+    const splitCols  = document.getElementById('split-columns-checkbox')?.checked ?? true;
+    const queue      = autoRetry ? available : available.slice(0, 1);
 
     document.getElementById('upload-loading').classList.remove('hidden');
     document.getElementById('upload-results').classList.add('hidden');
     document.getElementById('check-btn').disabled = true;
-    setLoadingMessage(`Analysing with ${queue[0].name}…`);
 
-    let lastError;
-    for (let mi = 0; mi < queue.length; mi++) {
-        const model = queue[mi];
-        const apiKey = localStorage.getItem(model.keyStorageKey);
-        try {
-            const results = await tryModelWithRetries(model, selectedFileData, apiKey);
-            displayWorksheetResults(results, model);
-            document.getElementById('upload-loading').classList.add('hidden');
-            document.getElementById('check-btn').disabled = false;
-            return;
-        } catch (err) {
-            lastError = err;
-            const canSwitch = (isRateLimitError(err) || isTransientError(err)) && mi < queue.length - 1;
-            if (canSwitch) {
-                const next = queue[mi + 1];
-                setLoadingMessage(`${model.name} is unavailable. Switching to ${next.name}…`);
-                await new Promise(r => setTimeout(r, 2000));
-            } else {
-                break;
-            }
+    try {
+        // Enhance and (optionally) split into per-column images.
+        let images, prompt;
+        if (splitCols) {
+            setLoadingMessage('Enhancing image and finding columns…');
+            images = await prepareColumnImages(selectedFileData);
+            prompt = images.length > 1 ? COLUMN_PROMPT : WORKSHEET_PROMPT;
+        } else {
+            setLoadingMessage('Enhancing image…');
+            images = [await prepareEnhancedImage(selectedFileData)];
+            prompt = WORKSHEET_PROMPT;
         }
-    }
 
-    document.getElementById('upload-loading').classList.add('hidden');
-    document.getElementById('check-btn').disabled = false;
-    alert('Could not check worksheet: ' + (lastError?.message || 'Unknown error'));
+        const allResults = [];
+        const modelsUsed = new Set();
+        for (let c = 0; c < images.length; c++) {
+            const label = images.length > 1 ? `Reading column ${c + 1} of ${images.length}` : 'Analysing worksheet';
+            const { results, model } = await runWithFailover(queue, images[c], prompt, label);
+            allResults.push(...results);
+            modelsUsed.add(model.name);
+        }
+
+        const cols = images.length;
+        const labelText = [...modelsUsed].join(', ') + (cols > 1 ? ` · ${cols} columns` : '');
+        displayWorksheetResults(allResults, labelText);
+    } catch (err) {
+        alert('Could not check worksheet: ' + (err?.message || 'Unknown error'));
+    } finally {
+        document.getElementById('upload-loading').classList.add('hidden');
+        document.getElementById('check-btn').disabled = false;
+    }
 }
 
 // ─── Client-side math verification ────────────────────────────
@@ -417,7 +470,7 @@ function verifyMath(results) {
 
 // ─── Results rendering ─────────────────────────────────────────
 
-function displayWorksheetResults(results, model) {
+function displayWorksheetResults(results, labelText) {
     results = verifyMath(results);
 
     const tbody = document.getElementById('results-tbody');
@@ -442,8 +495,8 @@ function displayWorksheetResults(results, model) {
     document.getElementById('results-wrong-count').textContent = `✗ ${total - correct} wrong`;
 
     const modelLabel = document.getElementById('results-model-label');
-    if (modelLabel && model) {
-        modelLabel.textContent = `${total} questions detected · checked with ${model.name} (${model.provider})`;
+    if (modelLabel) {
+        modelLabel.textContent = `${total} questions detected` + (labelText ? ` · ${labelText}` : '');
     }
 
     document.getElementById('upload-results').classList.remove('hidden');
