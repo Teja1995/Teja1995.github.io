@@ -51,21 +51,19 @@ firebase-config.js  — Firebase project credentials + initialises firebase + db
 - **"Automatically try other models" checkbox** (checked by default): when unchecked, only the selected model is attempted with no failover
 
 **Worksheet prompt design (`upload.js → WORKSHEET_PROMPT`):**
-The prompt is a 7-step structured instruction. The model's only job is to read handwriting — it never computes answers. `correctAnswer` and `isCorrect` are always returned as `""` and `false`; the app fills them in client-side.
+The model's only job is to read handwriting — it never computes answers. `correctAnswer` and `isCorrect` are always returned as `""` and `false`; the app fills them in client-side. Key instructions:
 
-- **Step 1 — Orientation:** mentally straighten a tilted or rotated photo before reading anything
-- **Step 2 — Count every `=` sign:** scan the full image and count all printed `=` signs before reading any answers. Each `=` is exactly one problem. The output array must contain exactly this many items. This forces the model to acknowledge the full image including rightmost columns before it starts.
-- **Step 3 — Identify columns:** treat each column as a vertical newspaper strip; identify all column boundaries before reading
-- **Step 4 — Read one complete column at a time:** finish the entire column top-to-bottom before moving right. Never scan horizontally across the page.
-- **Step 5 — Use the `=` sign as a horizontal anchor:** for each line, find the printed `=` sign, read left at the exact same horizontal level for the question, and right for the answer (the student writes on the long printed underline after `=`). Both operands must be on the same horizontal level as the `=`. This was added to stop Gemini borrowing the second operand from the line above (e.g. reading `46 + 38` instead of `46 + 85` when `38` was the second operand on the preceding line).
-- **Step 6 — Transcribe the student's answer:** faint pencil marks count; empty blank → `"blank"`; unreadable marks → `"unreadable"`
-- **Step 7 — Self-verify:** count output array items; if fewer than the Step 2 count, find the missing problems and add them before returning
+- **Layout:** 4 vertical columns, ~48 problems each (~192 per page), each problem on one line `number + number = answer`
+- **Anchor operands on the `+` sign:** the numbers immediately left and right of the `+` are the two operands, always on the same line as that `+`. (Earlier versions anchored on `=`; the `+` is a tighter anchor because the operands directly flank it.)
+- **Never borrow digits across lines:** rows are packed close together, so the model was reading the second operand from the row above (e.g. `46 + 38` instead of `46 + 85`). The prompt includes a concrete WRONG-vs-RIGHT example of this exact mistake.
+- **Reading order:** one full column at a time, left to right; the rightmost columns are the easiest to skip.
+- **Student answer:** faint pencil counts; empty → `"blank"`; written-but-illegible → `"unreadable"`.
+- **Completeness without fabrication:** report only rows actually visible — never invent or duplicate a problem to hit a count. (An earlier "must return exactly 192" rule caused the model to fabricate rows when it couldn't read them all.)
+
+**Truncation note:** `MAX_OUTPUT_TOKENS = 16384`. A full ~192-item JSON response is ~6k tokens; the previous 8192 limit could truncate the array mid-way, which showed up as a too-low question count. The headroom prevents that.
 
 **Client-side math verification (`upload.js → verifyMath`):**
-Before rendering, `verifyMath(results)` runs over every row. It calls `computeAnswer(questionStr)` which parses the question string and computes the correct answer in JavaScript (handles `+`, `−`, `×`, and fraction-as-percentage). The computed value overwrites `r.correctAnswer` and `r.isCorrect` is re-evaluated with 0.01 tolerance. This means AI math errors can never affect the final verdict — models only need to read handwriting, all arithmetic is done client-side.
-
-**Client-side blank/unreadable enforcement (`upload.js → displayWorksheetResults`):**
-After `verifyMath`, the app additionally forces `isCorrect = false` for any row where `studentAnswer` is `"blank"` or `"unreadable"`. Safety net in case a model ignores the prompt instruction.
+Before rendering, `verifyMath(results)` returns a fresh array for every row. `computeAnswer(questionStr)` parses the question and computes the correct answer in JavaScript (handles `+`, `−`, `×`, and fraction-as-percentage). The computed value becomes `correctAnswer`, and `isCorrect` is decided entirely client-side: blank/unreadable/empty is always `false`; otherwise the student's number is compared to the computed value with 0.01 tolerance. AI math errors can never affect the verdict — the model only reads, we do all arithmetic. Blank/unreadable enforcement lives inside `verifyMath` (no separate safety-net loop).
 
 **JSON response parsing (`upload.js → parseAIJSON`):**
 Models (especially Groq/OpenRouter) frequently return malformed or decorated JSON. Five recovery passes are tried in order before giving up:
@@ -143,20 +141,21 @@ No npm, no bundler, no build step.
 
 ## API Format Details
 
+Both callers go through a shared `postJSON(url, headers, body)` helper and use `MAX_OUTPUT_TOKENS = 16384`.
+
 **Gemini format** (`models.js`: `apiFormat: 'gemini'`):
 ```
 POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=KEY
 Body: { contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type, data: base64 } }] }],
-        generationConfig: { temperature: 0, maxOutputTokens: 8192 } }
+        generationConfig: { temperature: 0, maxOutputTokens: 16384 } }
 Response: candidates[0].content.parts[0].text
 ```
 
-**OpenAI-compatible format** (Groq, OpenRouter — `apiFormat: 'openai'`):
+**OpenAI-compatible format** (Groq — `apiFormat: 'openai'`):
 ```
-POST https://api.groq.com/openai/v1/chat/completions  (or openrouter.ai/api/v1/...)
+POST https://api.groq.com/openai/v1/chat/completions
 Headers: Authorization: Bearer KEY
-         HTTP-Referer + X-Title (OpenRouter only, per their usage policy)
-Body: { model: modelId, temperature: 0, max_tokens: 8192,
+Body: { model: modelId, temperature: 0, max_tokens: 16384,
         messages: [{ role: user, content: [{ type: text }, { type: image_url, image_url: { url: data:mimeType;base64,... } }] }] }
 Response: choices[0].message.content
 ```
