@@ -33,6 +33,7 @@ async function processFile(file) {
     document.getElementById('file-name-display').textContent = file.name;
     document.getElementById('file-preview').classList.remove('hidden');
     document.getElementById('upload-results').classList.add('hidden');
+    renderSplitPreview(null);
 
     const imgPreview = document.getElementById('image-preview');
     const pdfCanvas = document.getElementById('pdf-canvas');
@@ -88,24 +89,26 @@ function removeFile() {
     document.getElementById('upload-results').classList.add('hidden');
     document.getElementById('worksheet-input').value = '';
     document.getElementById('check-btn').disabled = true;
+    renderSplitPreview(null);
 }
 
 // ─── Worksheet prompt (shared across all models) ───────────────
 
 const WORKSHEET_PROMPT =
-`You are checking a student's completed addition worksheet. Your ONLY job is to read what is printed and what the student wrote by hand. Never calculate any answer yourself.
+`You are transcribing a student's math practice worksheet. Your ONLY job is to read what is printed and what the student wrote by hand. You never calculate anything.
 
 LAYOUT
 - The page is divided into 4 vertical columns, side by side.
 - Each column holds about 48 problems stacked top to bottom (roughly 192 on the whole page).
 - Every problem sits on ONE horizontal line and looks like:
-      number  +  number  =  answer
-  The student's answer is the handwritten number written after the = sign.
+      number  operator  number  =  ________
+  The operator can be +, −, × or ÷ — read whichever symbol is printed.
+  After the = sign there is a printed underline where the student may have handwritten an answer.
 
 HOW TO READ EACH LINE
-1. Find the + sign on the line. The number immediately LEFT of it and the number immediately RIGHT of it are the two operands. They are ALWAYS on the same line as that + sign.
-2. Find the = sign on the same line. The handwritten number after it is the student's answer.
-3. The two operands and the answer all share ONE horizontal line. NEVER take a digit from the line above or below.
+1. Read the printed question: first number, the operator symbol between the numbers, second number — all on that ONE line.
+2. Look at the space after the = sign on the SAME line for the student's handwritten answer.
+3. NEVER take a digit from the line above or below.
 
 The exact mistake to avoid (rows are packed close together):
    line 1:  21 + 38 = 59
@@ -114,44 +117,53 @@ The exact mistake to avoid (rows are packed close together):
    RIGHT → reading line 2 as "46 + 85" (both numbers are on line 2's own line) ✓
 
 READING ORDER
-Work one full column at a time, left to right. Finish every line in column 1 before starting column 2, then column 3, then column 4. The columns on the right edge are the easiest to forget — make sure all four are read.
+Work one full column at a time, left to right. Finish every line in column 1 before starting column 2, then 3, then 4. The right-edge columns are the easiest to forget.
 
 THE STUDENT'S ANSWER
-- Handwriting present (even faint pencil) → copy the number exactly as written.
-- Nothing written after the = sign → "blank"
-- Written but impossible to read → "unreadable"
+- Handwritten digits present (pen or faint pencil) → copy them exactly as written.
+- Only the printed underline, no handwriting → "blank"
+- Handwriting present but impossible to read → "unreadable"
+
+GOLDEN RULE — blank means blank
+Completely or partially unanswered sheets are very common. NEVER output a number the student did not physically write. If the space after = shows only the printed underline, studentAnswer is "blank" — even if you know what the result would be. Writing a computed answer for an empty line is the worst possible error you can make.
 
 COMPLETENESS
-Report every problem that is actually printed on the page — expect roughly 192. Only report rows you can actually see; NEVER invent, guess, or duplicate a problem just to reach a number. If your count is far below ~190 you have probably skipped a column — look again at the right side of the page.
+Report every printed problem exactly once, only problems you can actually see. Never invent, guess, or duplicate a problem to reach a count. If your total is far below ~190 you probably skipped a column — re-check the right side of the page.
 
 OUTPUT
-Return ONLY a JSON array, nothing else — no markdown, no code fences, no commentary:
-[{"question":"46 + 85","studentAnswer":"131","correctAnswer":"","isCorrect":false}]
+Return ONLY a JSON array, nothing else — no markdown, no code fences, no commentary. Use the exact operator symbol you see:
+[{"question":"46 + 85","studentAnswer":"131","correctAnswer":"","isCorrect":false},
+ {"question":"72 − 19","studentAnswer":"blank","correctAnswer":"","isCorrect":false}]
 Always set "correctAnswer" to "" and "isCorrect" to false — the app fills these in itself.`;
 
 // Used when the page is split into single columns (one column per image).
 const COLUMN_PROMPT =
-`You are checking ONE COLUMN from a student's addition worksheet. This image is a single vertical strip of problems stacked top to bottom (about 40–50 of them). Read the handwriting only — never calculate any answer yourself.
+`You are transcribing ONE COLUMN cut from a student's math practice worksheet. The image is a single vertical strip of problems stacked top to bottom (about 40–50 of them). Your ONLY job is to read; you never calculate anything.
 
-Each problem is on ONE horizontal line:
-    number  +  number  =  answer
-The student's answer is the handwritten number written after the = sign.
+Every problem sits on ONE horizontal line:
+    number  operator  number  =  ________
+The operator can be +, −, × or ÷ — read whichever symbol is printed. After the = sign there is a printed underline where the student may have handwritten an answer.
 
 HOW TO READ EACH LINE
-1. Find the + sign. The number immediately LEFT and the number immediately RIGHT of it are the two operands — both on that same line.
-2. Find the = sign on the same line. The handwritten number after it is the student's answer.
-3. The operands and the answer all share ONE line. NEVER take a digit from the line above or below.
-
-Read strictly top to bottom. Report EVERY problem you can see; never invent or duplicate one.
+1. Read the printed question: first number, the operator symbol between the numbers, second number — all on that ONE line.
+2. Look at the space after the = sign on the SAME line for the student's handwritten answer.
+3. NEVER take a digit from the line above or below.
 
 THE STUDENT'S ANSWER
-- Handwriting present (even faint pencil) → copy the number exactly as written.
-- Nothing written after the = sign → "blank"
-- Written but impossible to read → "unreadable"
+- Handwritten digits present (pen or faint pencil) → copy them exactly as written.
+- Only the printed underline, no handwriting → "blank"
+- Handwriting present but impossible to read → "unreadable"
+
+GOLDEN RULE — blank means blank
+Completely or partially unanswered sheets are very common. NEVER output a number the student did not physically write. If the space after = shows only the printed underline, studentAnswer is "blank" — even if you know what the result would be. Writing a computed answer for an empty line is the worst possible error you can make.
+
+COMPLETENESS
+Read strictly top to bottom. Report every printed problem exactly once — never skip, invent, or duplicate one.
 
 OUTPUT
-Return ONLY a JSON array, nothing else — no markdown, no commentary:
-[{"question":"46 + 85","studentAnswer":"131","correctAnswer":"","isCorrect":false}]
+Return ONLY a JSON array, nothing else — no markdown, no commentary. Use the exact operator symbol you see:
+[{"question":"46 + 85","studentAnswer":"131","correctAnswer":"","isCorrect":false},
+ {"question":"72 − 19","studentAnswer":"blank","correctAnswer":"","isCorrect":false}]
 Always set "correctAnswer" to "" and "isCorrect" to false — the app fills these in itself.`;
 
 // ─── Per-format API callers ────────────────────────────────────
@@ -351,6 +363,27 @@ function setLoadingMessage(msg) {
     if (p) p.textContent = msg;
 }
 
+// Show the exact images sent to the AI so column-split problems are
+// immediately visible to the user.
+function renderSplitPreview(prep) {
+    const box = document.getElementById('split-preview');
+    if (!box) return;
+    if (!prep || !prep.previews || prep.previews.length === 0) {
+        box.classList.add('hidden');
+        box.innerHTML = '';
+        return;
+    }
+    const title = prep.split
+        ? `Detected ${prep.previews.length} columns — this is exactly what the AI reads:`
+        : 'Could not split columns reliably — sending the whole enhanced page:';
+    box.innerHTML = `
+        <p class="split-preview-title">${title}</p>
+        <div class="split-preview-row">
+            ${prep.previews.map(u => `<img src="${u}" alt="Column preview">`).join('')}
+        </div>`;
+    box.classList.remove('hidden');
+}
+
 // Try each model in the queue for a single image; returns { results, model }
 // or throws after exhausting the queue.
 async function runWithFailover(queue, fileData, prompt, label) {
@@ -397,16 +430,17 @@ async function checkWorksheet() {
 
     try {
         // Enhance and (optionally) split into per-column images.
-        let images, prompt;
+        let prep;
         if (splitCols) {
             setLoadingMessage('Enhancing image and finding columns…');
-            images = await prepareColumnImages(selectedFileData);
-            prompt = images.length > 1 ? COLUMN_PROMPT : WORKSHEET_PROMPT;
+            prep = await prepareColumnImages(selectedFileData);
         } else {
             setLoadingMessage('Enhancing image…');
-            images = [await prepareEnhancedImage(selectedFileData)];
-            prompt = WORKSHEET_PROMPT;
+            prep = { parts: [await prepareEnhancedImage(selectedFileData)], previews: [], split: false };
         }
+        renderSplitPreview(prep);
+        const images = prep.parts;
+        const prompt = prep.split ? COLUMN_PROMPT : WORKSHEET_PROMPT;
 
         const allResults = [];
         const modelsUsed = new Set();
@@ -440,12 +474,17 @@ function computeAnswer(questionStr) {
         [/^(\d+)\s*\+\s*(\d+)$/,                       (a, b) => a + b],            // addition
         [/^(\d+)\s*[−\-]\s*(\d+)$/,                    (a, b) => a - b],            // subtraction
         [/^(\d+)\s*[×x\*]\s*(\d+)$/i,                  (a, b) => a * b],            // multiplication
-        [/^(\d+)\s*\/\s*(\d+)\s*as\s*a\s*percentage/i, (a, b) => +((a / b) * 100).toFixed(2)], // percentage
+        [/^(\d+)\s*\/\s*(\d+)\s*as\s*a\s*percentage/i, (a, b) => (a / b) * 100],    // percentage (before plain /)
+        [/^(\d+)\s*[÷:]\s*(\d+)$/,                     (a, b) => b === 0 ? NaN : a / b], // division
+        [/^(\d+)\s*\/\s*(\d+)$/,                       (a, b) => b === 0 ? NaN : a / b], // division written with /
     ];
 
     for (const [pattern, fn] of ops) {
         const m = q.match(pattern);
-        if (m) return String(fn(parseInt(m[1]), parseInt(m[2])));
+        if (!m) continue;
+        const v = fn(parseInt(m[1]), parseInt(m[2]));
+        if (!Number.isFinite(v)) return null;
+        return Number.isInteger(v) ? String(v) : String(+v.toFixed(2));
     }
     return null; // unrecognised format
 }

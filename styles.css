@@ -972,6 +972,27 @@ h1 {
     flex-shrink: 0;
 }
 
+/* Preview of the column strips actually sent to the AI */
+.split-preview {
+    margin-bottom: 16px;
+}
+.split-preview-title {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+.split-preview-row {
+    display: flex;
+    gap: 8px;
+}
+.split-preview-row img {
+    flex: 1;
+    min-width: 0;
+    max-width: 24%;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
 .btn-link {
     background: none;
     border: none;

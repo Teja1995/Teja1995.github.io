@@ -54,25 +54,34 @@ firebase-config.js  — Firebase project credentials + initialises firebase + db
 **Worksheet prompt design (`upload.js → WORKSHEET_PROMPT`):**
 The model's only job is to read handwriting — it never computes answers. `correctAnswer` and `isCorrect` are always returned as `""` and `false`; the app fills them in client-side. Key instructions:
 
-- **Layout:** 4 vertical columns, ~48 problems each (~192 per page), each problem on one line `number + number = answer`
-- **Anchor operands on the `+` sign:** the numbers immediately left and right of the `+` are the two operands, always on the same line as that `+`. (Earlier versions anchored on `=`; the `+` is a tighter anchor because the operands directly flank it.)
+- **Layout:** 4 vertical columns, ~48 problems each (~192 per page), each problem on one line `number operator number = ________`. **Operator-agnostic**: the operator may be `+`, `−`, `×` or `÷` — the prompt says "read whichever symbol is printed" (worksheets are not always addition).
 - **Never borrow digits across lines:** rows are packed close together, so the model was reading the second operand from the row above (e.g. `46 + 38` instead of `46 + 85`). The prompt includes a concrete WRONG-vs-RIGHT example of this exact mistake.
 - **Reading order:** one full column at a time, left to right; the rightmost columns are the easiest to skip.
 - **Student answer:** faint pencil counts; empty → `"blank"`; written-but-illegible → `"unreadable"`.
-- **Completeness without fabrication:** report only rows actually visible — never invent or duplicate a problem to hit a count. (An earlier "must return exactly 192" rule caused the model to fabricate rows when it couldn't read them all.)
+- **GOLDEN RULE — blank means blank:** unanswered sheets are common; the model must NEVER output a number the student didn't physically write, "even if you know what the result would be". Re-added after Llama hallucinated answers on a completely empty sheet. The JSON example includes a `"blank"` row so the model sees the expected pattern.
+- **Completeness without fabrication:** report each printed problem exactly once, only rows actually visible — never invent or duplicate a problem to hit a count. (An earlier "must return exactly 192" rule caused the model to fabricate rows when it couldn't read them all.)
+- `COLUMN_PROMPT` is the single-column variant of the same rules (used in split mode).
 
 **Truncation / token limit:** output token cap is **per-model** (`model.maxTokens` in models.js; `DEFAULT_MAX_TOKENS = 8192` fallback in upload.js). Gemini = 16384 (a full-page ~192-item response is ~6k tokens; the old 8192 cap truncated it, showing as a low count). Groq Llama 4 Scout = 8192 — its API **rejects** anything higher (`max_tokens must be ≤ 8192`). In column mode each request is only ~48 problems (~1.5k tokens) so 8192 is ample.
 
-**Client-side image enhancement + column splitting (`imaging.js`):**
-Before any API call, the uploaded image is processed entirely in the browser (canvas only, no libraries):
-- `prepareColumnImages(fileData)` → downscale huge photos to ≤2600px long side, grayscale + contrast boost (`CONTRAST = 1.4`) + a 3×3 sharpen pass, then detect the 4 columns and crop each into its own JPEG.
-- **Column detection** uses a vertical ink-density projection over the body region (skips header/footer); for each expected boundary (¼, ½, ¾ of width) it snaps the cut to the emptiest pixel-column within ±8%. Falls back to a single enhanced image if detection looks wrong (not 4 regions, or any region <10% width).
-- `prepareEnhancedImage(fileData)` → same enhancement, no split (used when the split checkbox is off).
+**Client-side image enhancement + geometry-aware column splitting (`imaging.js`):**
+Before any API call, the uploaded image is processed entirely in the browser (canvas only, no libraries). `prepareColumnImages(fileData)` pipeline:
+1. **Enhance** — downscale to ≤2600px long side, grayscale + contrast boost (`CONTRAST = 1.4`) + 3×3 sharpen pass
+2. **Find the page** — Otsu threshold on a 520px analysis copy; the page is the bright (paper) region, so dark desk/background around an off-centre phone photo is excluded. Ink mask is computed only inside the page.
+3. **Orientation** — text lines give a strongly periodic horizontal projection; the projection-variance score is compared upright vs rotated 90° to auto-fix sideways photos, and a header heuristic (Date/Name/title ink sits *above* the table, empty margin *below*) flips upside-down photos 180°.
+4. **Deskew** — best angle in ±10° (0.5° steps) by maximising projection variance; rotation expands the canvas (white fill) so nothing clips.
+5. **Table block** — longest contiguous run of inky rows inside the page = the printed problem grid; this also crops off the header and margins.
+6. **Column cuts** — vertical ink projection over the table rows only; each expected boundary (¼, ½, ¾ **of the table width**, not the image width) snaps to the emptiest smoothed valley within ±10%. Sanity check: 4 regions each 15–40% of table width, else fallback.
+7. **Crop** — one JPEG per column (+1% padding) plus 200px preview thumbnails.
+
+Returns `{ parts, previews, split }`. Any failure falls back to a single enhanced full-page image (`split: false`). `prepareEnhancedImage(fileData)` = enhancement only, used when the split checkbox is off.
+
+**Split preview UI:** `renderSplitPreview(prep)` shows the exact column strips sent to the AI under the file preview (`#split-preview`), so bad segmentation is immediately visible to the user. Cleared on file change/removal.
 
 **Why split:** sending one column (~48 problems) per request instead of the whole page (~192) means far less for the model to miscount, no token-truncation risk, and no cross-row digit borrowing. `checkWorksheet` runs each column through the failover queue sequentially (via `runWithFailover`), merges all rows, and shows e.g. `192 questions detected · Gemini 2.5 Flash · 4 columns`. Trade-off: 4 API calls per worksheet instead of 1 — heavier on Gemini's 5 RPM free tier (handled by 429 failover to Groq). Controlled by the **"Higher accuracy — enhance image & scan each column separately"** checkbox (on by default); when off, one enhanced full-page image is sent with `WORKSHEET_PROMPT`. Split columns use `COLUMN_PROMPT` instead.
 
 **Client-side math verification (`upload.js → verifyMath`):**
-Before rendering, `verifyMath(results)` returns a fresh array for every row. `computeAnswer(questionStr)` parses the question and computes the correct answer in JavaScript (handles `+`, `−`, `×`, and fraction-as-percentage). The computed value becomes `correctAnswer`, and `isCorrect` is decided entirely client-side: blank/unreadable/empty is always `false`; otherwise the student's number is compared to the computed value with 0.01 tolerance. AI math errors can never affect the verdict — the model only reads, we do all arithmetic. Blank/unreadable enforcement lives inside `verifyMath` (no separate safety-net loop).
+Before rendering, `verifyMath(results)` returns a fresh array for every row. `computeAnswer(questionStr)` parses the question and computes the correct answer in JavaScript (handles `+`, `−`, `×`, `÷` (also `:` or plain `/`), and fraction-as-percentage; non-integer results formatted to 2dp). The computed value becomes `correctAnswer`, and `isCorrect` is decided entirely client-side: blank/unreadable/empty is always `false`; otherwise the student's number is compared to the computed value with 0.01 tolerance. AI math errors can never affect the verdict — the model only reads, we do all arithmetic. Blank/unreadable enforcement lives inside `verifyMath` (no separate safety-net loop).
 
 **JSON response parsing (`upload.js → parseAIJSON`):**
 Models (especially Groq/OpenRouter) frequently return malformed or decorated JSON. Five recovery passes are tried in order before giving up:
@@ -301,4 +310,6 @@ Apply in: Firebase Console → Realtime Database → Rules → Publish.
 | Temperature = 0 on all API calls | Temperature 0.1 caused different results on identical images. Setting to 0 makes output fully deterministic — the same image always produces the same response from the same model. |
 | Auto-retry checkbox (checked by default) | Users wanted to control whether the app silently switches models. Checkbox unchecked = selected model only, no failover; checkbox checked = current behaviour. |
 | Client-side image enhancement + 4-column splitting (`imaging.js`) | A single 192-problem page overwhelmed the vision models (miscounts, cross-row borrowing, truncation). Enhancing contrast/sharpness improves handwriting reading; splitting into 4 per-column images (~48 problems each) drastically reduces those errors. Pure canvas/JS — no OpenCV dependency. Trade-off is 4 API calls per worksheet (heavier on 5 RPM Gemini), so it's a checkbox, on by default. |
-| Column detection via ink-density projection, not OpenCV | Worksheets have a fixed 4-column layout with clear vertical gaps; a simple per-column dark-pixel projection that snaps each ¼/½/¾ cut to the emptiest nearby column is enough, with a fallback to a single image if it looks wrong. Avoids shipping a heavy CV library. |
+| Geometry-aware splitting (page box → orientation → deskew → table block → valley cuts), not fixed cuts | The first splitter cut at fixed ¼/½/¾ positions **of the image**, assuming a centred, straight, frame-filling page. Real phone photos have desk visible, off-centre tilted pages — the cuts sliced through question columns, the AI got digit fragments, and Llama hallucinated phantom questions/answers (worst on blank sheets). The new pipeline finds the paper (Otsu brightness), auto-fixes 90°/180° orientation, deskews ±10°, locates the printed table, and cuts at ink valleys relative to the **table** width. Still pure canvas/JS, no OpenCV. |
+| Split preview thumbnails in the UI | Segmentation bugs were invisible — users only saw wrong results. Showing the exact column strips sent to the AI makes a bad split obvious at a glance. |
+| Prompts are operator-agnostic (`+ − × ÷`) | Worksheets follow the same layout but vary the operation; prompts hard-coded to "addition"/"+ sign" would misread other sheets. `computeAnswer` likewise handles all four operators plus percentages. |
