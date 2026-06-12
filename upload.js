@@ -93,112 +93,87 @@ function removeFile() {
 // ─── Worksheet prompt (shared across all models) ───────────────
 
 const WORKSHEET_PROMPT =
-`You are checking a student's completed math worksheet. Read the handwriting only — do not compute answers yourself.
+`You are checking a student's completed addition worksheet. Your ONLY job is to read what is printed and what the student wrote by hand. Never calculate any answer yourself.
 
-━━━ PAGE STRUCTURE ━━━
-The page has exactly 4 vertical columns. Each column contains exactly 48 problems. Total problems on the page: 192.
-Your output array must contain exactly 192 items. If you produce fewer, you have missed problems.
+LAYOUT
+- The page is divided into 4 vertical columns, side by side.
+- Each column holds about 48 problems stacked top to bottom (roughly 192 on the whole page).
+- Every problem sits on ONE horizontal line and looks like:
+      number  +  number  =  answer
+  The student's answer is the handwritten number written after the = sign.
 
-Each column is a narrow vertical strip. Within a column every problem is on its own horizontal line:
+HOW TO READ EACH LINE
+1. Find the + sign on the line. The number immediately LEFT of it and the number immediately RIGHT of it are the two operands. They are ALWAYS on the same line as that + sign.
+2. Find the = sign on the same line. The handwritten number after it is the student's answer.
+3. The two operands and the answer all share ONE horizontal line. NEVER take a digit from the line above or below.
 
-  [number]  [operator]  [number]  =  ________
+The exact mistake to avoid (rows are packed close together):
+   line 1:  21 + 38 = 59
+   line 2:  46 + 85 = 131
+   WRONG → reading line 2 as "46 + 38" (38 was borrowed from line 1 above) ✗
+   RIGHT → reading line 2 as "46 + 85" (both numbers are on line 2's own line) ✓
 
-The  ________  is a long printed underline. The student writes their answer ON TOP of or just above this underline.
+READING ORDER
+Work one full column at a time, left to right. Finish every line in column 1 before starting column 2, then column 3, then column 4. The columns on the right edge are the easiest to forget — make sure all four are read.
 
-━━━ STEPS ━━━
+THE STUDENT'S ANSWER
+- Handwriting present (even faint pencil) → copy the number exactly as written.
+- Nothing written after the = sign → "blank"
+- Written but impossible to read → "unreadable"
 
-STEP 1 — Straighten the image.
-If the photo is tilted or rotated, mentally correct it so all text is horizontal before reading anything.
+COMPLETENESS
+Report every problem that is actually printed on the page — expect roughly 192. Only report rows you can actually see; NEVER invent, guess, or duplicate a problem just to reach a number. If your count is far below ~190 you have probably skipped a column — look again at the right side of the page.
 
-STEP 2 — Process columns one at a time, left to right.
-Column 1 (leftmost): read all 48 problems top to bottom.
-Column 2: read all 48 problems top to bottom.
-Column 3: read all 48 problems top to bottom.
-Column 4 (rightmost): read all 48 problems top to bottom.
-Never move to the next column before you have 48 items from the current one.
-
-STEP 3 — Read each problem using the = sign as your horizontal anchor.
-Every problem has a printed = sign. Use it as the anchor for that line:
-  • Read LEFT of the = along the SAME horizontal level → [number] [operator] [number] (the question)
-  • Read RIGHT of the = along the SAME horizontal level → the underline where the student wrote
-
-⛔ Both operands in the question MUST be on the same horizontal level as the = sign.
-⛔ Never take a digit from a line above or below to form part of the question.
-
-The exact mistake to avoid:
-  Row 1:  21 + 38 = ___   (student wrote 59)
-  Row 2:  46 + 85 = ___   (student wrote 131)
-  Wrong: reading row 2 as "46 + 38" — 38 is from row 1, not row 2 ✗
-  Right: reading row 2 as "46 + 85" — both numbers are on row 2's own line ✓
-
-STEP 4 — Transcribe the student's answer.
-Look only at the underline to the right of = on that line.
-  • Any handwriting, even faint pencil → transcribe the number exactly as written.
-  • Underline is empty (nothing written) → "blank"
-  • Something written but unreadable → "unreadable"
-
-STEP 5 — Count check before returning.
-Count your output items. You must have exactly 192. If you have fewer, go back column by column and find the missing rows — do not return until the count is 192.
-
-━━━ OUTPUT FORMAT ━━━
-Return ONLY a valid JSON array — no explanation, no markdown, nothing outside the array:
-[{"question":"46 + 85","studentAnswer":"131","correctAnswer":"","isCorrect":false}, ...]
-
-Always set correctAnswer to "" and isCorrect to false — the app computes both.`;
+OUTPUT
+Return ONLY a JSON array, nothing else — no markdown, no code fences, no commentary:
+[{"question":"46 + 85","studentAnswer":"131","correctAnswer":"","isCorrect":false}]
+Always set "correctAnswer" to "" and "isCorrect" to false — the app fills these in itself.`;
 
 // ─── Per-format API callers ────────────────────────────────────
 
-async function callGeminiAPI(model, base64, mimeType, apiKey) {
-    const response = await fetch(`${model.endpoint}?key=${apiKey}`, {
+const MAX_OUTPUT_TOKENS = 16384; // a full ~192-item response is ~6k tokens; headroom avoids truncation
+
+// POST a request, throw a clean Error on failure, return parsed JSON body.
+async function postJSON(url, headers, body) {
+    const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            contents: [{
-                parts: [
-                    { text: WORKSHEET_PROMPT },
-                    { inline_data: { mime_type: mimeType, data: base64 } }
-                ]
-            }],
-            generationConfig: { temperature: 0, maxOutputTokens: 8192 }
-        })
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify(body)
     });
     if (!response.ok) {
         const err = await response.json().catch(() => ({}));
         throw new Error(err.error?.message || `HTTP ${response.status}`);
     }
-    const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    return parseAIJSON(text, model.name);
+    return response.json();
+}
+
+async function callGeminiAPI(model, base64, mimeType, apiKey) {
+    const data = await postJSON(`${model.endpoint}?key=${apiKey}`, {}, {
+        contents: [{
+            parts: [
+                { text: WORKSHEET_PROMPT },
+                { inline_data: { mime_type: mimeType, data: base64 } }
+            ]
+        }],
+        generationConfig: { temperature: 0, maxOutputTokens: MAX_OUTPUT_TOKENS }
+    });
+    return parseAIJSON(data.candidates?.[0]?.content?.parts?.[0]?.text || '', model.name);
 }
 
 async function callOpenAICompatAPI(model, base64, mimeType, apiKey) {
-    const headers = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-    };
-    const response = await fetch(model.endpoint, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-            model: model.modelId,
-            messages: [{
-                role: 'user',
-                content: [
-                    { type: 'text', text: WORKSHEET_PROMPT },
-                    { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } }
-                ]
-            }],
-            temperature: 0,
-            max_tokens: 8192
-        })
+    const data = await postJSON(model.endpoint, { 'Authorization': `Bearer ${apiKey}` }, {
+        model: model.modelId,
+        messages: [{
+            role: 'user',
+            content: [
+                { type: 'text', text: WORKSHEET_PROMPT },
+                { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64}` } }
+            ]
+        }],
+        temperature: 0,
+        max_tokens: MAX_OUTPUT_TOKENS
     });
-    if (!response.ok) {
-        const err = await response.json().catch(() => ({}));
-        throw new Error(err.error?.message || `HTTP ${response.status}`);
-    }
-    const data = await response.json();
-    const text = data.choices?.[0]?.message?.content || '';
-    return parseAIJSON(text, model.name);
+    return parseAIJSON(data.choices?.[0]?.message?.content || '', model.name);
 }
 
 // ─── Parse error logger ────────────────────────────────────────
@@ -401,68 +376,56 @@ async function checkWorksheet() {
 }
 
 // ─── Client-side math verification ────────────────────────────
-// The model reads the question and the student's handwriting.
-// We compute the correct answer ourselves so model math errors don't
-// affect the final isCorrect judgement.
+// The model only reads the question and the student's handwriting.
+// We compute the correct answer ourselves so model math errors can
+// never affect the final verdict.
 
 function computeAnswer(questionStr) {
     const q = String(questionStr || '').replace(/\s*=\s*\??$/, '').trim();
 
-    let m;
-    // Addition:  31 + 29
-    m = q.match(/^(\d+)\s*\+\s*(\d+)$/);
-    if (m) return String(parseInt(m[1]) + parseInt(m[2]));
+    const ops = [
+        [/^(\d+)\s*\+\s*(\d+)$/,                       (a, b) => a + b],            // addition
+        [/^(\d+)\s*[−\-]\s*(\d+)$/,                    (a, b) => a - b],            // subtraction
+        [/^(\d+)\s*[×x\*]\s*(\d+)$/i,                  (a, b) => a * b],            // multiplication
+        [/^(\d+)\s*\/\s*(\d+)\s*as\s*a\s*percentage/i, (a, b) => +((a / b) * 100).toFixed(2)], // percentage
+    ];
 
-    // Subtraction: 45 - 12  or  45 − 12
-    m = q.match(/^(\d+)\s*[−\-]\s*(\d+)$/);
-    if (m) return String(parseInt(m[1]) - parseInt(m[2]));
-
-    // Multiplication: 3 × 4  or  3 x 4
-    m = q.match(/^(\d+)\s*[×x\*]\s*(\d+)$/i);
-    if (m) return String(parseInt(m[1]) * parseInt(m[2]));
-
-    // Percentage: 3 / 8 as a percentage
-    m = q.match(/^(\d+)\s*\/\s*(\d+)\s*as\s*a\s*percentage/i);
-    if (m) return ((parseInt(m[1]) / parseInt(m[2])) * 100).toFixed(2);
-
-    return null; // unrecognised format — leave model's value unchanged
+    for (const [pattern, fn] of ops) {
+        const m = q.match(pattern);
+        if (m) return String(fn(parseInt(m[1]), parseInt(m[2])));
+    }
+    return null; // unrecognised format
 }
 
+// Returns a new array with correctAnswer/isCorrect filled in by us.
 function verifyMath(results) {
     return results.map(r => {
+        const answer  = String(r.studentAnswer ?? '').trim();
+        const isBlank = /^(blank|unreadable)$/i.test(answer) || answer === '';
         const computed = computeAnswer(r.question);
-        if (computed === null) return r; // can't parse, leave as-is
 
-        r.correctAnswer = computed; // override model's answer with ours
-
-        const s = String(r.studentAnswer || '').trim().toLowerCase();
-        if (s === 'blank' || s === 'unreadable' || s === '') {
-            r.isCorrect = false;
-        } else {
-            r.isCorrect = Math.abs(parseFloat(s) - parseFloat(computed)) < 0.01;
-        }
-        return r;
+        return {
+            question:      r.question,
+            studentAnswer: r.studentAnswer,
+            correctAnswer: computed ?? r.correctAnswer ?? '',
+            // Blank/unreadable is never correct. Otherwise compare to our computed value.
+            isCorrect: !isBlank && computed !== null &&
+                       Math.abs(parseFloat(answer) - parseFloat(computed)) < 0.01,
+        };
     });
 }
 
 // ─── Results rendering ─────────────────────────────────────────
 
 function displayWorksheetResults(results, model) {
+    results = verifyMath(results);
+
     const tbody = document.getElementById('results-tbody');
     tbody.innerHTML = '';
 
-    // Compute correct answers ourselves — model math can't be trusted
-    results = verifyMath(results);
-
-    // Safety net: blank/unreadable answers can never be marked correct
-    results.forEach(r => {
-        const s = String(r.studentAnswer).toLowerCase();
-        if (s === 'blank' || s === 'unreadable') r.isCorrect = false;
-    });
-
-    let correct = 0, wrong = 0;
+    let correct = 0;
     results.forEach((r, i) => {
-        if (r.isCorrect) correct++; else wrong++;
+        if (r.isCorrect) correct++;
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td>${i + 1}</td>
@@ -474,11 +437,14 @@ function displayWorksheetResults(results, model) {
         tbody.appendChild(tr);
     });
 
+    const total = results.length;
     document.getElementById('results-correct-count').textContent = `✓ ${correct} correct`;
-    document.getElementById('results-wrong-count').textContent = `✗ ${wrong} wrong`;
+    document.getElementById('results-wrong-count').textContent = `✗ ${total - correct} wrong`;
 
     const modelLabel = document.getElementById('results-model-label');
-    if (modelLabel && model) modelLabel.textContent = `Checked with ${model.name} (${model.provider})`;
+    if (modelLabel && model) {
+        modelLabel.textContent = `${total} questions detected · checked with ${model.name} (${model.provider})`;
+    }
 
     document.getElementById('upload-results').classList.remove('hidden');
 }
