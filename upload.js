@@ -156,7 +156,7 @@ Always set "correctAnswer" to "" and "isCorrect" to false — the app fills thes
 
 // ─── Per-format API callers ────────────────────────────────────
 
-const MAX_OUTPUT_TOKENS = 16384; // a full ~192-item response is ~6k tokens; headroom avoids truncation
+const DEFAULT_MAX_TOKENS = 8192; // safe fallback; per-model limit set in models.js
 
 // POST a request, throw a clean Error on failure, return parsed JSON body.
 async function postJSON(url, headers, body) {
@@ -180,7 +180,7 @@ async function callGeminiAPI(model, base64, mimeType, apiKey, prompt) {
                 { inline_data: { mime_type: mimeType, data: base64 } }
             ]
         }],
-        generationConfig: { temperature: 0, maxOutputTokens: MAX_OUTPUT_TOKENS }
+        generationConfig: { temperature: 0, maxOutputTokens: model.maxTokens || DEFAULT_MAX_TOKENS }
     });
     return parseAIJSON(data.candidates?.[0]?.content?.parts?.[0]?.text || '', model.name);
 }
@@ -196,7 +196,7 @@ async function callOpenAICompatAPI(model, base64, mimeType, apiKey, prompt) {
             ]
         }],
         temperature: 0,
-        max_tokens: MAX_OUTPUT_TOKENS
+        max_tokens: model.maxTokens || DEFAULT_MAX_TOKENS
     });
     return parseAIJSON(data.choices?.[0]?.message?.content || '', model.name);
 }

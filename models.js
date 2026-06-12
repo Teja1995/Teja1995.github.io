@@ -11,6 +11,7 @@ const MODELS = [
         tagClass: 'tag-recommended',
         accuracy: 5,
         rpmLabel: '5 req / min',
+        maxTokens: 16384,
         keyStorageKey: 'geminiApiKey',
         dbKey: 'geminiKey',
         icon: `<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true">
@@ -39,6 +40,7 @@ const MODELS = [
         tagClass: 'tag-fast',
         accuracy: 3,
         rpmLabel: '30 req / min',
+        maxTokens: 8192,
         keyStorageKey: 'groqApiKey',
         dbKey: 'groqKey',
         icon: `<svg viewBox="0 0 28 28" width="26" height="26" aria-hidden="true">

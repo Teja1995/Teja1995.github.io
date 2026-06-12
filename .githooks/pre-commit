@@ -1,0 +1,8 @@
+#!/bin/sh
+# Auto-stamp the current UTC time into BUILD_TIME in script.js so the in-app
+# version badge always reflects the deployed build — no manual edits needed.
+# Activated via: git config core.hooksPath .githooks
+
+ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+sed -i.bak -E "s/const BUILD_TIME = '[^']*';/const BUILD_TIME = '$ts';/" script.js && rm -f script.js.bak
+git add script.js

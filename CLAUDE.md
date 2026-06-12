@@ -61,7 +61,7 @@ The model's only job is to read handwriting — it never computes answers. `corr
 - **Student answer:** faint pencil counts; empty → `"blank"`; written-but-illegible → `"unreadable"`.
 - **Completeness without fabrication:** report only rows actually visible — never invent or duplicate a problem to hit a count. (An earlier "must return exactly 192" rule caused the model to fabricate rows when it couldn't read them all.)
 
-**Truncation note:** `MAX_OUTPUT_TOKENS = 16384`. A full ~192-item JSON response is ~6k tokens; the previous 8192 limit could truncate the array mid-way, which showed up as a too-low question count. The headroom prevents that.
+**Truncation / token limit:** output token cap is **per-model** (`model.maxTokens` in models.js; `DEFAULT_MAX_TOKENS = 8192` fallback in upload.js). Gemini = 16384 (a full-page ~192-item response is ~6k tokens; the old 8192 cap truncated it, showing as a low count). Groq Llama 4 Scout = 8192 — its API **rejects** anything higher (`max_tokens must be ≤ 8192`). In column mode each request is only ~48 problems (~1.5k tokens) so 8192 is ample.
 
 **Client-side image enhancement + column splitting (`imaging.js`):**
 Before any API call, the uploaded image is processed entirely in the browser (canvas only, no libraries):
@@ -150,13 +150,13 @@ No npm, no bundler, no build step.
 
 ## API Format Details
 
-Both callers go through a shared `postJSON(url, headers, body)` helper and use `MAX_OUTPUT_TOKENS = 16384`.
+Both callers go through a shared `postJSON(url, headers, body)` helper and read the token cap from `model.maxTokens` (Gemini 16384, Groq 8192).
 
 **Gemini format** (`models.js`: `apiFormat: 'gemini'`):
 ```
 POST https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=KEY
 Body: { contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type, data: base64 } }] }],
-        generationConfig: { temperature: 0, maxOutputTokens: 16384 } }
+        generationConfig: { temperature: 0, maxOutputTokens: model.maxTokens } }
 Response: candidates[0].content.parts[0].text
 ```
 
@@ -164,7 +164,7 @@ Response: candidates[0].content.parts[0].text
 ```
 POST https://api.groq.com/openai/v1/chat/completions
 Headers: Authorization: Bearer KEY
-Body: { model: modelId, temperature: 0, max_tokens: 16384,
+Body: { model: modelId, temperature: 0, max_tokens: model.maxTokens,   // Groq rejects > 8192
         messages: [{ role: user, content: [{ type: text }, { type: image_url, image_url: { url: data:mimeType;base64,... } }] }] }
 Response: choices[0].message.content
 ```

@@ -173,6 +173,15 @@ h1 {
     align-self: flex-end;
     margin-bottom: 1px;
 }
+.version-badge.version-ok {
+    color: var(--correct);
+    opacity: 0.8;
+}
+.version-badge.version-stale {
+    color: var(--wrong);
+    opacity: 1;
+    font-weight: 600;
+}
 
 .user-area {
     display: flex;

@@ -1,4 +1,6 @@
-const APP_VERSION = '2026-06-12 · 22ce7cb';
+// Auto-stamped by .git/hooks (core.hooksPath = .githooks) on every commit — do not edit by hand.
+const BUILD_TIME = '2026-06-12T04:50:32Z';
+const REPO = 'Teja1995/Teja1995.github.io';
 
 let time, timer;
 let correctCount = 0;
@@ -250,15 +252,39 @@ function initializeQuote() {
 window.addEventListener('load', () => {
     initializeQuote();
     renderOperationSelector();
-
-    const brand = document.querySelector('.app-brand');
-    if (brand) {
-        const badge = document.createElement('span');
-        badge.className = 'version-badge';
-        badge.textContent = APP_VERSION;
-        brand.appendChild(badge);
-    }
+    showVersionBadge();
 });
+
+// Shows the deployed build time, then checks GitHub for the latest commit.
+// If the page you're viewing is behind (e.g. a cached old version), the badge
+// turns into a "hard refresh" warning. If current, it shows "✓ latest".
+async function showVersionBadge() {
+    const brand = document.querySelector('.app-brand');
+    if (!brand) return;
+
+    const badge = document.createElement('span');
+    badge.className = 'version-badge';
+    badge.textContent = 'build ' + BUILD_TIME.slice(0, 16).replace('T', ' ') + ' UTC';
+    brand.appendChild(badge);
+
+    try {
+        const res = await fetch(`https://api.github.com/repos/${REPO}/commits/main`);
+        if (!res.ok) return; // offline or rate-limited — leave build time shown
+        const data = await res.json();
+        const latestMs = new Date(data.commit.committer.date).getTime();
+        const builtMs  = new Date(BUILD_TIME).getTime();
+        const sha = data.sha.slice(0, 7);
+
+        if (builtMs >= latestMs - 60000) {       // within 60s skew = up to date
+            badge.textContent = `✓ latest · ${sha}`;
+            badge.classList.add('version-ok');
+        } else {
+            badge.textContent = '⚠ update available — hard refresh (Ctrl+F5)';
+            badge.classList.add('version-stale');
+            badge.title = `This page was built ${BUILD_TIME}; latest commit is ${sha}.`;
+        }
+    } catch { /* network/API issue — keep the build time */ }
+}
 
 function startPractice() {
     const selectedOps = getSelectedOps();
