@@ -95,53 +95,54 @@ function removeFile() {
 const WORKSHEET_PROMPT =
 `You are checking a student's completed math worksheet. Read the handwriting only — do not compute answers yourself.
 
-━━━ WHAT THE WORKSHEET LOOKS LIKE ━━━
-The page has 4 vertical columns of problems side by side. Each column is a narrow strip running top to bottom. Within each column every problem occupies one horizontal line:
+━━━ PAGE STRUCTURE ━━━
+The page has exactly 4 vertical columns. Each column contains exactly 48 problems. Total problems on the page: 192.
+Your output array must contain exactly 192 items. If you produce fewer, you have missed problems.
+
+Each column is a narrow vertical strip. Within a column every problem is on its own horizontal line:
 
   [number]  [operator]  [number]  =  ________
 
-The  ________  is a long printed underline. The student writes their answer ON TOP of this underline. The student's handwritten number appears directly on or just above the underline.
+The  ________  is a long printed underline. The student writes their answer ON TOP of or just above this underline.
 
-━━━ HOW TO READ IT ━━━
+━━━ STEPS ━━━
 
 STEP 1 — Straighten the image.
-If the photo is tilted or rotated, mentally correct it first so all text is horizontal.
+If the photo is tilted or rotated, mentally correct it so all text is horizontal before reading anything.
 
-STEP 2 — Count every printed = sign across the whole image.
-Scan left to right, top to bottom, and count every = sign (including those in the 3rd and 4th columns on the right side of the page). This total is the exact number of items your output array must contain.
+STEP 2 — Process columns one at a time, left to right.
+Column 1 (leftmost): read all 48 problems top to bottom.
+Column 2: read all 48 problems top to bottom.
+Column 3: read all 48 problems top to bottom.
+Column 4 (rightmost): read all 48 problems top to bottom.
+Never move to the next column before you have 48 items from the current one.
 
-STEP 3 — Work through one column at a time, left to right.
-Start at the top of the leftmost column. Read every problem in that column from top to bottom. Only move to the next column after finishing the current one completely.
+STEP 3 — Read each problem using the = sign as your horizontal anchor.
+Every problem has a printed = sign. Use it as the anchor for that line:
+  • Read LEFT of the = along the SAME horizontal level → [number] [operator] [number] (the question)
+  • Read RIGHT of the = along the SAME horizontal level → the underline where the student wrote
 
-STEP 4 — Read each line as one self-contained problem.
-Pick the printed = sign on the line as your anchor point. On that same horizontal line:
-  • Scan LEFT of the = to find: [number] [operator] [number] — this is the question.
-  • Scan RIGHT of the = to find: the long underline with the student's handwritten answer on it.
+⛔ Both operands in the question MUST be on the same horizontal level as the = sign.
+⛔ Never take a digit from a line above or below to form part of the question.
 
-⛔ CRITICAL — do not mix numbers across lines:
-Each line's two operands are printed on THAT LINE only.
+The exact mistake to avoid:
+  Row 1:  21 + 38 = ___   (student wrote 59)
+  Row 2:  46 + 85 = ___   (student wrote 131)
+  Wrong: reading row 2 as "46 + 38" — 38 is from row 1, not row 2 ✗
+  Right: reading row 2 as "46 + 85" — both numbers are on row 2's own line ✓
 
-Here is the exact mistake to avoid:
-  Row 1 prints:  21 + 38 = ___    student wrote: 59
-  Row 2 prints:  46 + 85 = ___    student wrote: 131
+STEP 4 — Transcribe the student's answer.
+Look only at the underline to the right of = on that line.
+  • Any handwriting, even faint pencil → transcribe the number exactly as written.
+  • Underline is empty (nothing written) → "blank"
+  • Something written but unreadable → "unreadable"
 
-Wrong: reading row 2 as "46 + 38" because 38 appears in row 1 directly above ✗
-Right: reading row 2 as "46 + 85" — both numbers are on row 2's own horizontal line ✓
-
-The rule: every digit in the question must be on the same horizontal level as the = sign for that problem.
-
-STEP 5 — Transcribe the student's answer from the underline.
-Look at the long underline to the right of = on that line. The student's number is written on/above it.
-  • Handwriting present (even faint pencil) → transcribe the number exactly.
-  • Underline completely blank (nothing written) → use "blank".
-  • Something written but impossible to read → use "unreadable".
-
-STEP 6 — Verify the count before finishing.
-Count the items in your output. If it is less than your Step 2 count, you have skipped problems — find them and add them before returning.
+STEP 5 — Count check before returning.
+Count your output items. You must have exactly 192. If you have fewer, go back column by column and find the missing rows — do not return until the count is 192.
 
 ━━━ OUTPUT FORMAT ━━━
-Return ONLY a valid JSON array. No explanation, no markdown, no text before or after:
-[{"question":"46 + 85","studentAnswer":"131","correctAnswer":"","isCorrect":false}]
+Return ONLY a valid JSON array — no explanation, no markdown, nothing outside the array:
+[{"question":"46 + 85","studentAnswer":"131","correctAnswer":"","isCorrect":false}, ...]
 
 Always set correctAnswer to "" and isCorrect to false — the app computes both.`;
 
